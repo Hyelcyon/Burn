@@ -1,6 +1,6 @@
 --!strict
 
-const Constants = require(script.Parent.Parent.Constants)
+const Constants = require("@src/Constants")
 
 export type ByteBuffer = {
 	raw: buffer,

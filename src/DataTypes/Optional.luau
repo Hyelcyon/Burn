@@ -1,6 +1,6 @@
 --!strict
 
-const Types = require(script.Parent.Parent.Types)
+const Types = require("@src/Types")
 
 const function Optional<T>(descriptor: Types.TypeDescriptor<T>): Types.TypeDescriptor<T?>
 	const innerWrite = descriptor.write

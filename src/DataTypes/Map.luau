@@ -1,6 +1,6 @@
 --!strict
 
-const Types = require(script.Parent.Parent.Types)
+const Types = require("@src/Types")
 
 const function Map<K, V>(
 	keyDescriptor: Types.TypeDescriptor<K>,

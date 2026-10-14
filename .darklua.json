@@ -1,0 +1,23 @@
+{
+  "rules": [
+    {
+      "rule": "convert_require",
+      "current": {
+        "name": "path",
+        "use_luau_configuration": false,
+        "sources": {
+          "@src": "./src",
+          "@buffer": "./src/Buffer",
+          "@datatypes": "./src/DataTypes",
+          "@network": "./src/Network",
+          "@packet": "./src/Packet"
+        }
+      },
+      "target": {
+        "name": "roblox",
+        "rojo_sourcemap": "./sourcemap.json",
+        "indexing_style": "property"
+      }
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 const RunService = game:GetService("RunService")
 const ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-const Constants = require(script.Parent.Parent.Constants)
+const Constants = require("@src/Constants")
 
 const Channel = {}
 

@@ -1,10 +1,13 @@
 return {
 	luau = {
 		languagemode = "strict",
-		linterrors = true,
 
 		aliases = {
-			burn = "./src",
+			src = "./src",
+			buffer = "./src/Buffer",
+			datatypes = "./src/DataTypes",
+			network = "./src/Network",
+			packet = "./src/Packet",
 		},
 	},
 }

@@ -3,10 +3,10 @@
 const RunService = game:GetService("RunService")
 const Players = game:GetService("Players")
 
-const Constants = require(script.Parent.Parent.Constants)
-const Types = require(script.Parent.Parent.Types)
-const ByteBuffer = require(script.Parent.Parent.Buffer.ByteBuffer)
-const Channel = require(script.Parent.Channel)
+const Constants = require("@src/Constants")
+const Types = require("@src/Types")
+const ByteBuffer = require("@buffer/ByteBuffer")
+const Channel = require("@network/Channel")
 
 const OutgoingQueue = {}
 

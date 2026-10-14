@@ -1,6 +1,6 @@
 --!strict
 
-const Types = require(script.Parent.Parent.Types)
+const Types = require("@src/Types")
 
 @native
 const function write(buf: buffer, offset: number, value: EnumItem): number

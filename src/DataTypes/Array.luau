@@ -1,6 +1,6 @@
 --!strict
 
-const Types = require(script.Parent.Parent.Types)
+const Types = require("@src/Types")
 
 const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeDescriptor<{ T }>
 	const elemWrite = elementDescriptor.write

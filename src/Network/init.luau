@@ -1,9 +1,9 @@
 --!strict
 
-const Channel = require(script.Channel)
-const OutgoingQueue = require(script.OutgoingQueue)
-const Server = require(script.Server)
-const Client = require(script.Client)
+const Channel = require("@network/Channel")
+const OutgoingQueue = require("@network/OutgoingQueue")
+const Server = require("@network/Server")
+const Client = require("@network/Client")
 
 return table.freeze({
 	Channel = Channel,

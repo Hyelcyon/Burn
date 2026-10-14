@@ -2,12 +2,12 @@
 
 const RunService = game:GetService("RunService")
 
-const Types = require(script.Types)
-const Constants = require(script.Constants)
-const Buffer = require(script.Buffer)
-const DataTypes = require(script.DataTypes)
-const Packet = require(script.Packet)
-const Network = require(script.Network)
+const Types = require("@src/Types")
+const Constants = require("@src/Constants")
+const Buffer = require("@buffer")
+const DataTypes = require("@datatypes")
+const Packet = require("@packet")
+const Network = require("@network")
 
 export type TypeDescriptor<T> = Types.TypeDescriptor<T>
 export type PacketType = Types.PacketType

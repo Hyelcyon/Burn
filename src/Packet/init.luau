@@ -1,7 +1,7 @@
 --!strict
 
-const Definition = require(script.Definition)
-const Registry = require(script.Registry)
+const Definition = require("@packet/Definition")
+const Registry = require("@packet/Registry")
 
 export type PacketType = Definition.PacketType
 export type PacketDefinition<T> = Definition.PacketDefinition<T>

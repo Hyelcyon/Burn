@@ -1,8 +1,8 @@
 --!strict
 
-const Constants = require(script.Parent.Parent.Constants)
-const Types = require(script.Parent.Parent.Types)
-const Definition = require(script.Parent.Definition)
+const Constants = require("@src/Constants")
+const Types = require("@src/Types")
+const Definition = require("@packet/Definition")
 
 const Registry = {}
 

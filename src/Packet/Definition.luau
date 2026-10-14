@@ -1,6 +1,6 @@
 --!strict
 
-const Types = require(script.Parent.Parent.Types)
+const Types = require("@src/Types")
 
 export type PacketType = Types.PacketType
 export type PacketDefinition<T> = Types.PacketDefinition<T>

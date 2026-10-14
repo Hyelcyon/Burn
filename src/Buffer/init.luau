@@ -1,7 +1,7 @@
 --!strict
 
-const ByteBuffer = require(script.ByteBuffer)
-const Cursor = require(script.Cursor)
+const ByteBuffer = require("@buffer/ByteBuffer")
+const Cursor = require("@buffer/Cursor")
 
 export type ByteBuffer = ByteBuffer.ByteBuffer
 export type Cursor = Cursor.Cursor
