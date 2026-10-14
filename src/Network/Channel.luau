@@ -111,4 +111,17 @@ function Channel.getRequestFunction(): RemoteFunction
 	return func
 end
 
+function Channel.init()
+	if RunService:IsServer() then
+		Channel.getFolder()
+		Channel.getReliableEvent()
+		Channel.getUnreliableEvent()
+		Channel.getRequestFunction()
+	end
+end
+
+if RunService:IsServer() then
+	Channel.init()
+end
+
 return Channel
