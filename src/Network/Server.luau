@@ -30,7 +30,7 @@ local listenerHeads: { [number]: ListenerNode? } = {}
 local listenerTails: { [number]: ListenerNode? } = {}
 local requestHandlersByPacketId: { [number]: (player: Player, reqData: any) -> (any, Types.TypeDescriptor<any>) } = {}
 local playerRateLimits: { [Player]: RateLimit? } = {}
-local removingPlayers: { [Player]: boolean? } = setmetatable({}, { __mode = "k" })
+local removingPlayers: { [Player]: boolean? } = (setmetatable({}, { __mode = "k" }) :: any) :: { [Player]: boolean? }
 local isListening = false
 
 const function isPlayerActive(player: Player): boolean
@@ -126,7 +126,7 @@ const function decodeAndDispatch(player: Player, rawBuf: buffer, expectedType: T
 		return
 	end
 
-	const ok, err = pcall(decodeBatchFast, player, rawBuf, bufLen, expectedType)
+	const ok, err: any = pcall(decodeBatchFast :: any, player, rawBuf, bufLen, expectedType)
 	if not ok then
 		warn(`[Burn] Dropped malformed packet batch from {player.Name}: {err}`)
 	end

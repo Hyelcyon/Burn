@@ -19,7 +19,7 @@ export type Cursor = Buffer.Cursor
 const isServer = RunService:IsServer()
 const isClient = RunService:IsClient()
 
-const function on(packet, listener)
+const function on(packet: any, listener: any)
 	if isServer then
 		return Network.Server.on(packet, listener)
 	else

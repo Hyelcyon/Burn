@@ -23,7 +23,7 @@ local isReliablePlayerDirty: { [Player]: boolean? } = {}
 local activeUnreliablePlayers: { Player } = {}
 local isUnreliablePlayerDirty: { [Player]: boolean? } = {}
 
-local removingPlayers: { [Player]: boolean? } = setmetatable({}, { __mode = "k" })
+local removingPlayers: { [Player]: boolean? } = (setmetatable({}, { __mode = "k" }) :: any) :: { [Player]: boolean? }
 local isInitialized = false
 local isClientChannelReady = false
 
