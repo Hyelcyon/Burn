@@ -54,7 +54,7 @@ function ByteBuffer.compact(self: ByteBuffer): buffer
 	return exact
 end
 
-const scratchBuffer: ByteBuffer = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY)
+const scratchBuffer: ByteBuffer = ByteBuffer.create(Constants.MAX_PACKET_SIZE)
 
 @native
 function ByteBuffer.getScratch(): ByteBuffer
