@@ -13,6 +13,7 @@ export type Connection = Types.Connection
 
 type ListenerNode = {
 	callback: (any) -> (),
+	connected: boolean,
 	next: ListenerNode?,
 	prev: ListenerNode?,
 }
@@ -24,7 +25,7 @@ local listenerTails: { [number]: ListenerNode? } = {}
 local isListening = false
 
 @native
-const function decodeAndDispatch(rawBuf: buffer)
+const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
 	local offset = 0
 	const bufLen = buffer.len(rawBuf)
 
@@ -39,15 +40,19 @@ const function decodeAndDispatch(rawBuf: buffer)
 		end
 
 		const packetDef = Registry.getById(packetId)
-		if packetDef ~= nil then
+		if packetDef ~= nil and packetDef.packetType == expectedType then
 			local current = listenerHeads[packetId]
 			if current ~= nil then
-				local data
-				data = packetDef.schema.read(rawBuf, payloadStart)
+				const data, readEndOffset = packetDef.schema.read(rawBuf, payloadStart)
+				if typeof(readEndOffset) == "number" and readEndOffset ~= nextOffset then
+					break
+				end
+
 				while current ~= nil do
-					const nextNode = current.next
-					task.spawn(current.callback, data)
-					current = nextNode
+					if current.connected then
+						task.spawn(current.callback, data)
+					end
+					current = current.next
 				end
 			end
 		end
@@ -66,33 +71,40 @@ const function ensureListening()
 		return
 	end
 
-	Channel.getReliableEvent().OnClientEvent:Connect(function(rawBuf)
-		if typeof(rawBuf) == "buffer" then
-			decodeAndDispatch(rawBuf)
-		end
+	task.spawn(function()
+		Channel.getReliableEvent().OnClientEvent:Connect(function(rawBuf)
+			if typeof(rawBuf) == "buffer" then
+				decodeAndDispatch(rawBuf, "Reliable")
+			end
+		end)
 	end)
 
-	Channel.getUnreliableEvent().OnClientEvent:Connect(function(rawBuf)
-		if typeof(rawBuf) == "buffer" then
-			decodeAndDispatch(rawBuf)
-		end
+	task.spawn(function()
+		Channel.getUnreliableEvent().OnClientEvent:Connect(function(rawBuf)
+			if typeof(rawBuf) == "buffer" then
+				decodeAndDispatch(rawBuf, "Unreliable")
+			end
+		end)
 	end)
 end
 
-function Client.send(packetDef, data)
+function Client.send<T>(packetDef: Types.PacketDefinition<T>, data: T)
 	OutgoingQueue.clientEnqueue(packetDef, data)
 end
 
-function Client.sendImmediate(packetDef, data)
+function Client.sendImmediate<T>(packetDef: Types.PacketDefinition<T>, data: T)
 	OutgoingQueue.clientSendImmediate(packetDef, data)
 end
 
-function Client.on(packetDef, listener): Connection
-	ensureListening()
+function Client.on<T>(packetDef: Types.PacketDefinition<T>, listener: (T) -> ()): Connection
+	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
+		error(`Cannot register event listener for Request packet '{packetDef.name}'`)
+	end
 
 	const packetId = packetDef.id
 	const node: ListenerNode = {
 		callback = listener,
+		connected = true,
 		next = nil,
 		prev = listenerTails[packetId],
 	}
@@ -106,13 +118,14 @@ function Client.on(packetDef, listener): Connection
 		listenerTails[packetId] = node
 	end
 
-	local isConnected = true
+	ensureListening()
+
 	return {
 		disconnect = function(_self: Connection)
-			if not isConnected then
+			if not node.connected then
 				return
 			end
-			isConnected = false
+			node.connected = false
 
 			if node.prev ~= nil then
 				node.prev.next = node.next
@@ -127,17 +140,27 @@ function Client.on(packetDef, listener): Connection
 			end
 
 			node.prev = nil
-			node.next = nil
 		end,
 	}
 end
 
-function Client.invoke(packetDef, responseSchema, data)
+function Client.invoke<Req, Res>(
+	packetDef: Types.PacketDefinition<Req>,
+	responseSchema: Types.TypeDescriptor<Res>,
+	data: Req
+): Res?
+	if packetDef.packetType ~= "Request" then
+		error(`Client.invoke requires a packet with packetType == 'Request' (got '{packetDef.packetType}')`)
+	end
+
 	const scratch = ByteBuffer.getScratch()
 	const schemaSize = packetDef.schema.size
-	const capacity = if typeof(schemaSize) == "number" then schemaSize else 256
+	const capacity = if typeof(schemaSize) == "number" then schemaSize else Constants.MAX_PACKET_SIZE
 	ByteBuffer.ensureCapacity(scratch, capacity)
 	const reqLen = packetDef.schema.write(scratch.raw, 0, data)
+	if reqLen < 0 or reqLen > Constants.MAX_PAYLOAD_SIZE then
+		error(`Request payload ({reqLen} bytes) exceeds limit ({Constants.MAX_PAYLOAD_SIZE} bytes)`)
+	end
 
 	const reqBuf = buffer.create(Constants.HEADER_SIZE + reqLen)
 	buffer.writeu8(reqBuf, 0, packetDef.id)
@@ -146,16 +169,30 @@ function Client.invoke(packetDef, responseSchema, data)
 		buffer.copy(reqBuf, Constants.HEADER_SIZE, scratch.raw, 0, reqLen)
 	end
 
-	const resBuf = Channel.getRequestFunction():InvokeServer(reqBuf)
-	if typeof(resBuf) ~= "buffer" then
-		return nil
-	end
-	if buffer.len(resBuf) < Constants.HEADER_SIZE then
+	const invokeOk, resBuf = pcall(function()
+		return Channel.getRequestFunction():InvokeServer(reqBuf)
+	end)
+	if not invokeOk or typeof(resBuf) ~= "buffer" then
 		return nil
 	end
 
-	local resData
-	resData = responseSchema.read(resBuf, Constants.HEADER_SIZE)
+	const resBufLen = buffer.len(resBuf)
+	if resBufLen < Constants.HEADER_SIZE then
+		return nil
+	end
+
+	const resPacketId = buffer.readu8(resBuf, 0)
+	const resPayloadLen = buffer.readu16(resBuf, 1)
+	const expectedEnd = Constants.HEADER_SIZE + resPayloadLen
+	if resPacketId ~= packetDef.id or expectedEnd ~= resBufLen then
+		return nil
+	end
+
+	const resData, readEndOffset = responseSchema.read(resBuf, Constants.HEADER_SIZE)
+	if typeof(readEndOffset) == "number" and readEndOffset ~= expectedEnd then
+		return nil
+	end
+
 	return resData
 end
 
