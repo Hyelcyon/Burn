@@ -14,6 +14,7 @@ export type Connection = Types.Connection
 
 type ListenerNode = {
 	callback: (Player, any) -> (),
+	connected: boolean,
 	next: ListenerNode?,
 	prev: ListenerNode?,
 }
@@ -29,7 +30,12 @@ local listenerHeads: { [number]: ListenerNode? } = {}
 local listenerTails: { [number]: ListenerNode? } = {}
 local requestHandlersByPacketId: { [number]: (player: Player, reqData: any) -> (any, Types.TypeDescriptor<any>) } = {}
 local playerRateLimits: { [Player]: RateLimit? } = {}
+local removingPlayers: { [Player]: boolean? } = setmetatable({}, { __mode = "k" })
 local isListening = false
+
+const function isPlayerActive(player: Player): boolean
+	return not removingPlayers[player] and player.Parent == Players
+end
 
 @native
 const function checkRateLimit(player: Player, size: number): boolean
@@ -53,8 +59,9 @@ const function checkRateLimit(player: Player, size: number): boolean
 	)
 	limit.lastTime = now
 
-	if limit.currentBytes >= size then
-		limit.currentBytes -= size
+	const cost = math.max(size, Constants.MIN_PACKET_COST_BYTES)
+	if limit.currentBytes >= cost then
+		limit.currentBytes -= cost
 		return true
 	end
 
@@ -62,19 +69,16 @@ const function checkRateLimit(player: Player, size: number): boolean
 end
 
 @native
-const function decodeAndDispatch(player: Player, rawBuf: buffer)
+const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, expectedType: Types.PacketType)
 	local offset = 0
-	const bufLen = buffer.len(rawBuf)
-
-	if bufLen == 0 or bufLen > Constants.MAX_PACKET_SIZE then
-		return
-	end
-
-	if not checkRateLimit(player, bufLen) then
-		return
-	end
+	local packetCount = 0
 
 	while offset + Constants.HEADER_SIZE <= bufLen do
+		packetCount += 1
+		if packetCount > Constants.MAX_PACKETS_PER_BATCH then
+			break
+		end
+
 		const packetId = buffer.readu8(rawBuf, offset)
 		const payloadLen = buffer.readu16(rawBuf, offset + 1)
 		const payloadStart = offset + Constants.HEADER_SIZE
@@ -85,20 +89,46 @@ const function decodeAndDispatch(player: Player, rawBuf: buffer)
 		end
 
 		const packetDef = Registry.getById(packetId)
-		if packetDef ~= nil then
+		if packetDef ~= nil and packetDef.packetType == expectedType then
+			const fixedSize = packetDef.schema.size
+			if typeof(fixedSize) == "number" and payloadLen ~= fixedSize then
+				break
+			end
+
 			local current = listenerHeads[packetId]
 			if current ~= nil then
-				local data
-				data = packetDef.schema.read(rawBuf, payloadStart)
+				const data, readEndOffset = packetDef.schema.read(rawBuf, payloadStart)
+				if typeof(readEndOffset) == "number" and readEndOffset ~= nextOffset then
+					break
+				end
+
 				while current ~= nil do
-					const nextNode = current.next
-					task.spawn(current.callback, player, data)
-					current = nextNode
+					if current.connected then
+						task.spawn(current.callback, player, data)
+					end
+					current = current.next
 				end
 			end
 		end
 
 		offset = nextOffset
+	end
+end
+
+const function decodeAndDispatch(player: Player, rawBuf: buffer, expectedType: Types.PacketType)
+	const bufLen = buffer.len(rawBuf)
+	if bufLen < Constants.HEADER_SIZE or bufLen > Constants.MAX_PACKET_SIZE then
+		checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
+		return
+	end
+
+	if not checkRateLimit(player, bufLen) then
+		return
+	end
+
+	const ok, err = pcall(decodeBatchFast, player, rawBuf, bufLen, expectedType)
+	if not ok then
+		warn(`[Burn] Dropped malformed packet batch from {player.Name}: {err}`)
 	end
 end
 
@@ -112,28 +142,46 @@ const function ensureListening()
 		return
 	end
 
+	Channel.init()
+
 	Players.PlayerRemoving:Connect(function(player)
+		removingPlayers[player] = true
 		playerRateLimits[player] = nil
 	end)
 
 	Channel.getReliableEvent().OnServerEvent:Connect(function(player, rawBuf)
+		if not isPlayerActive(player) then
+			return
+		end
 		if typeof(rawBuf) == "buffer" then
-			decodeAndDispatch(player, rawBuf)
+			decodeAndDispatch(player, rawBuf, "Reliable")
+		else
+			checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
 		end
 	end)
 
 	Channel.getUnreliableEvent().OnServerEvent:Connect(function(player, rawBuf)
+		if not isPlayerActive(player) then
+			return
+		end
 		if typeof(rawBuf) == "buffer" then
-			decodeAndDispatch(player, rawBuf)
+			decodeAndDispatch(player, rawBuf, "Unreliable")
+		else
+			checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
 		end
 	end)
 
-	Channel.getRequestFunction().OnServerInvoke = function(player: Player, reqBuf): buffer?
+	Channel.getRequestFunction().OnServerInvoke = function(player: Player, reqBuf: any): buffer?
+		if not isPlayerActive(player) then
+			return nil
+		end
 		if typeof(reqBuf) ~= "buffer" then
+			checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
 			return nil
 		end
 		const reqLen = buffer.len(reqBuf)
 		if reqLen < Constants.HEADER_SIZE or reqLen > Constants.MAX_PACKET_SIZE then
+			checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
 			return nil
 		end
 		if not checkRateLimit(player, reqLen) then
@@ -141,8 +189,13 @@ const function ensureListening()
 		end
 
 		const packetId = buffer.readu8(reqBuf, 0)
-		const _payloadLen = buffer.readu16(reqBuf, 1)
+		const payloadLen = buffer.readu16(reqBuf, 1)
 		const payloadStart = Constants.HEADER_SIZE
+		const expectedEnd = payloadStart + payloadLen
+
+		if expectedEnd ~= reqLen then
+			return nil
+		end
 
 		const handler = requestHandlersByPacketId[packetId]
 		if handler == nil then
@@ -150,27 +203,45 @@ const function ensureListening()
 		end
 
 		const packetDef = Registry.getById(packetId)
-		if packetDef == nil then
+		if packetDef == nil or packetDef.packetType ~= "Request" then
 			return nil
 		end
 
-		local reqData
-		reqData = packetDef.schema.read(reqBuf, payloadStart)
+		const fixedReqSize = packetDef.schema.size
+		if typeof(fixedReqSize) == "number" and payloadLen ~= fixedReqSize then
+			return nil
+		end
+
+		const readOk, reqData, readEndOffset = pcall(packetDef.schema.read, reqBuf, payloadStart)
+		if not readOk then
+			return nil
+		end
+		if typeof(readEndOffset) == "number" and readEndOffset ~= expectedEnd then
+			return nil
+		end
 
 		const success, resData, resSchema = pcall(handler, player, reqData)
-		if not success then
-			warn(`[Burn] Request handler error for packet {packetDef.name} (id {packetId}): {resData}`)
-			return nil
-		end
-		if resSchema == nil then
+		if not success or resSchema == nil then
+			if not success then
+				warn(`[Burn] Request handler error for '{packetDef.name}': {resData}`)
+			end
 			return nil
 		end
 
 		const scratch = ByteBuffer.getScratch()
 		const resSize = resSchema.size
-		const capacity = if typeof(resSize) == "number" then resSize else 256
+		const capacity = if typeof(resSize) == "number" then resSize else Constants.MAX_PACKET_SIZE
 		ByteBuffer.ensureCapacity(scratch, capacity)
-		const resLen = resSchema.write(scratch.raw, 0, resData)
+
+		const writeOk, resLenOrErr = pcall(resSchema.write, scratch.raw, 0, resData)
+		if not writeOk then
+			return nil
+		end
+
+		const resLen = resLenOrErr :: number
+		if resLen < 0 or resLen > Constants.MAX_PAYLOAD_SIZE then
+			return nil
+		end
 
 		const out = buffer.create(Constants.HEADER_SIZE + resLen)
 		buffer.writeu8(out, 0, packetId)
@@ -183,44 +254,44 @@ const function ensureListening()
 	end
 end
 
-function Server.send(target: Player | { Player }, packetDef, data)
+function Server.send<T>(target: Player | { Player }, packetDef: Types.PacketDefinition<T>, data: T)
 	if typeof(target) == "table" then
-		for _, player in target do
-			OutgoingQueue.serverEnqueue(player, packetDef, data)
-		end
+		OutgoingQueue.serverEnqueueList(target, packetDef, data)
 	else
 		OutgoingQueue.serverEnqueue(target, packetDef, data)
 	end
 end
 
-function Server.sendImmediate(target: Player | { Player }, packetDef, data)
+function Server.sendImmediate<T>(target: Player | { Player }, packetDef: Types.PacketDefinition<T>, data: T)
 	if typeof(target) == "table" then
-		for _, player in target do
-			OutgoingQueue.serverSendImmediate(player, packetDef, data)
-		end
+		OutgoingQueue.serverSendImmediateList(target, packetDef, data)
 	else
 		OutgoingQueue.serverSendImmediate(target, packetDef, data)
 	end
 end
 
-function Server.broadcast(packetDef, data)
+function Server.broadcast<T>(packetDef: Types.PacketDefinition<T>, data: T)
 	OutgoingQueue.serverBroadcast(packetDef, data)
 end
 
-function Server.broadcastExcept(excludedPlayer: Player, packetDef, data)
+function Server.broadcastExcept<T>(excludedPlayer: Player, packetDef: Types.PacketDefinition<T>, data: T)
 	OutgoingQueue.serverBroadcastExcept(excludedPlayer, packetDef, data)
 end
 
-function Server.broadcastImmediate(packetDef, data)
+function Server.broadcastImmediate<T>(packetDef: Types.PacketDefinition<T>, data: T)
 	OutgoingQueue.serverBroadcastImmediate(packetDef, data)
 end
 
-function Server.on(packetDef, listener): Connection
+function Server.on<T>(packetDef: Types.PacketDefinition<T>, listener: (Player, T) -> ()): Connection
+	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
+		error(`Cannot register event listener for Request packet '{packetDef.name}'`)
+	end
 	ensureListening()
 
 	const packetId = packetDef.id
 	const node: ListenerNode = {
 		callback = listener,
+		connected = true,
 		next = nil,
 		prev = listenerTails[packetId],
 	}
@@ -234,13 +305,12 @@ function Server.on(packetDef, listener): Connection
 		listenerTails[packetId] = node
 	end
 
-	local isConnected = true
 	return {
 		disconnect = function(_self: Connection)
-			if not isConnected then
+			if not node.connected then
 				return
 			end
-			isConnected = false
+			node.connected = false
 
 			if node.prev ~= nil then
 				node.prev.next = node.next
@@ -255,15 +325,22 @@ function Server.on(packetDef, listener): Connection
 			end
 
 			node.prev = nil
-			node.next = nil
 		end,
 	}
 end
 
-function Server.handleRequest(packetDef, responseSchema: Types.TypeDescriptor<any>, handler: (Player, any) -> any)
+function Server.handleRequest<Req, Res>(
+	packetDef: Types.PacketDefinition<Req>,
+	responseSchema: Types.TypeDescriptor<Res>,
+	handler: (Player, Req) -> Res
+)
+	if packetDef.packetType ~= "Request" then
+		error(`Server.handleRequest requires a packet with packetType == 'Request' (got '{packetDef.packetType}')`)
+	end
 	ensureListening()
-	requestHandlersByPacketId[packetDef.id] = function(player, reqData)
-		return handler(player, reqData), responseSchema
+	requestHandlersByPacketId[packetDef.id] = function(player: Player, reqData: any)
+		const resData = handler(player, reqData)
+		return resData, responseSchema
 	end
 end
 
