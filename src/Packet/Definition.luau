@@ -5,9 +5,18 @@ const Types = require(script.Parent.Parent.Types)
 export type PacketType = Types.PacketType
 export type PacketDefinition<T> = Types.PacketDefinition<T>
 
-const function definePacket<T>(id: number, name: string, packetType: PacketType, schema: Types.TypeDescriptor<T>)
-	assert(typeof(id) == "number", "Packet ID must be a number")
+const function definePacket<T>(
+	id: number,
+	name: string,
+	packetType: PacketType,
+	schema: Types.TypeDescriptor<T>
+): PacketDefinition<T>
+	assert(typeof(id) == "number" and id % 1 == 0, "Packet ID must be an integer")
 	assert(typeof(name) == "string" and #name > 0, "Packet name must be a non-empty string")
+	assert(
+		packetType == "Reliable" or packetType == "Unreliable" or packetType == "Request",
+		"Invalid packetType; must be 'Reliable', 'Unreliable', or 'Request'"
+	)
 	assert(
 		typeof(schema) == "table"
 			and typeof(schema.write) == "function"

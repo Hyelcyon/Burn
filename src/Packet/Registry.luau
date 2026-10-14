@@ -22,22 +22,23 @@ function Registry.register<T>(
 	if explicitId == nil then
 		while packetsById[nextAutoId] ~= nil do
 			nextAutoId += 1
-			if nextAutoId > Constants.MAX_PACKET_ID then
-				error("Maximum packet ID limit reached (255)")
-			end
+		end
+		if nextAutoId > Constants.MAX_PACKET_ID then
+			error(`Maximum packet ID limit reached ({Constants.MAX_PACKET_ID})`)
 		end
 		id = nextAutoId
 		nextAutoId += 1
 	else
+		assert(typeof(explicitId) == "number" and explicitId % 1 == 0, "Explicit packet ID must be an integer")
+		assert(
+			explicitId >= 0 and explicitId <= Constants.MAX_PACKET_ID,
+			`Packet ID must be between 0 and {Constants.MAX_PACKET_ID}`
+		)
 		assert(
 			packetsById[explicitId] == nil,
 			`Packet ID {explicitId} is already in use by '{if packetsById[explicitId]
 				then packetsById[explicitId].name
 				else ""}'`
-		)
-		assert(
-			explicitId >= 0 and explicitId <= Constants.MAX_PACKET_ID,
-			`Packet ID must be between 0 and {Constants.MAX_PACKET_ID}`
 		)
 		id = explicitId
 	end
