@@ -28,11 +28,18 @@ type FieldEntry = {
 	desc: Types.AnyTypeDescriptor,
 }
 
+--[=[
+	@within DataTypes
+	Creates a structured record TypeDescriptor from a map of field descriptors.
+	Fields are serialized in lexicographical order to guarantee wire-format stability.
+]=]
 const function Struct<F>(fields: F & { read [string]: Types.AnyTypeDescriptor }): Types.TypeDescriptor<InferStructType<F>>
 	type T = InferStructType<F>
 
 	const fieldMap: { read [string]: Types.AnyTypeDescriptor } = fields
 
+	-- Luau hash map iteration order is non-deterministic. Sorting keys lexicographically
+	-- guarantees an identical binary layout across sender and receiver runtimes.
 	const keys: { string } = {}
 	for k in fieldMap do
 		table.insert(keys, k)
@@ -65,6 +72,8 @@ const function Struct<F>(fields: F & { read [string]: Types.AnyTypeDescriptor })
 	const fieldReads: { (buf: buffer, offset: number) -> (unknown, number) } = {}
 	const fieldSkips: { (buf: buffer, offset: number) -> number } = {}
 
+	-- Pre-shaped template: table.clone(template) leverages the VM's fast allocation path
+	-- with pre-allocated hash node capacity matching the struct shape.
 	const template: { [string]: unknown } = {}
 	for i = 1, fieldCount do
 		const entry = orderedFields[i]
@@ -78,6 +87,7 @@ const function Struct<F>(fields: F & { read [string]: Types.AnyTypeDescriptor })
 	local write: (buf: buffer, offset: number, value: T) -> number
 	local read: (buf: buffer, offset: number) -> (T, number)
 
+	-- Specialized 1-6 field implementations eliminate loop counters and dynamic table lookup overhead.
 	if fieldCount == 1 then
 		const k1 = fieldKeys[1]
 		const w1 = fieldWrites[1]
@@ -282,6 +292,7 @@ const function Struct<F>(fields: F & { read [string]: Types.AnyTypeDescriptor })
 	local skip: (buf: buffer, offset: number) -> number
 	if totalFixedSize ~= nil then
 		const fixedSize = totalFixedSize
+		-- O(1) skip: When every field has a known fixed size, advance the offset directly without memory access.
 		@native
 		local function skipFixed(_buf: buffer, offset: number): number
 			return offset + fixedSize

@@ -2,6 +2,8 @@
 
 const Types = require("@src/Types")
 
+-- LEB128 unsigned 32-bit integer encoding: 7 payload bits per byte with bit 7 (0x80) as continuation flag.
+-- Value thresholds are unrolled into magnitude branches to avoid loop overhead in hot paths.
 @native
 const function writeVarU32(buf: buffer, offset: number, value: number): number
 	const v = if value < 0 then 0 else bit32.band(value, 0xFFFFFFFF)
@@ -77,6 +79,8 @@ const function skipVarU32(buf: buffer, offset: number): number
 	return cur + 1
 end
 
+-- Zigzag encoding maps signed numbers to positive integers: 0 -> 0, -1 -> 1, 1 -> 2, -2 -> 3.
+-- This ensures small negative numbers occupy 1-2 bytes instead of 5 bytes under standard LEB128.
 @native
 const function writeVarI32(buf: buffer, offset: number, value: number): number
 	const n = bit32.band(value, 0xFFFFFFFF)
@@ -88,6 +92,7 @@ end
 const function readVarI32(buf: buffer, offset: number): (number, number)
 	const raw, nextOff = readVarU32(buf, offset)
 
+	-- If LSB is set, the original value was negative.
 	const decoded = if bit32.btest(raw, 1) then -(bit32.rshift(raw, 1) + 1) else bit32.rshift(raw, 1)
 	return decoded, nextOff
 end

@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	UTF-8 string TypeDescriptor prefixed with a 2-byte (u16) length (max 65,535 bytes).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: string): number
 	const len = #value

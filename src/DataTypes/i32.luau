@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	Signed 32-bit integer TypeDescriptor (range [-2,147,483,648, 2,147,483,647], little-endian).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: number): number
 	buffer.writei32(buf, offset, value)

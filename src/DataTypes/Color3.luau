@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	3-byte Color3 TypeDescriptor (3x u8 RGB channels in 0..255).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: Color3): number
 	buffer.writeu8(buf, offset, math.clamp(math.round(value.R * 255), 0, 255))

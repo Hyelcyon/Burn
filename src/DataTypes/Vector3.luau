@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	12-byte Vector3 TypeDescriptor (3x f32 components: X, Y, Z).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: Vector3): number
 	buffer.writef32(buf, offset, value.X)

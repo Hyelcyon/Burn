@@ -5,6 +5,15 @@ const ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 const Constants = require("@src/Constants")
 
+--[=[
+	@class Channel
+	@within Network
+	Manages the lifecycle and replication handshake for network instances in ReplicatedStorage.
+
+	The server creates the communication folder and remotes (`RemoteEvent`, `UnreliableRemoteEvent`,
+	`RemoteFunction`). Clients yield via `WaitForChild` until instances replicate from the server.
+	Resolved instance references are cached in module-level variables.
+]=]
 const Channel = {}
 
 local cachedFolder: Folder? = nil
@@ -12,6 +21,9 @@ local cachedReliable: RemoteEvent? = nil
 local cachedUnreliable: UnreliableRemoteEvent? = nil
 local cachedRequest: RemoteFunction? = nil
 
+--[=[
+	Resolves and caches the shared network folder in ReplicatedStorage.
+]=]
 function Channel.getFolder(): Folder
 	if cachedFolder ~= nil then
 		return cachedFolder

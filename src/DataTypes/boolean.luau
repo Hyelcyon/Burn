@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	1-byte boolean TypeDescriptor (0 = false, 1 = true).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: boolean): number
 	buffer.writeu8(buf, offset, if value then 1 else 0)

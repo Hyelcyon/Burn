@@ -12,6 +12,12 @@ type PriorityQueues = {
 	[number]: ByteBuffer.ByteBuffer,
 }
 
+--[=[
+	@class OutgoingQueue
+	@within Network
+	Frame-batched outgoing network queue supporting transmission priorities,
+	proactive MTU splitting, and serialization deduplication.
+]=]
 const OutgoingQueue = {}
 
 const function createPriorityQueues(): PriorityQueues
@@ -36,6 +42,7 @@ local isReliablePlayerDirty: { [Player]: boolean? } = {}
 local activeUnreliablePlayers: { Player } = {}
 local isUnreliablePlayerDirty: { [Player]: boolean? } = {}
 
+-- Weak-keyed set to prevent memory leaks while verifying player validity during disconnect.
 local removingPlayers = setmetatable({} :: { [Player]: boolean? }, { __mode = "k" })
 local isInitialized = false
 local isClientChannelReady = false
@@ -44,6 +51,8 @@ const function isPlayerActive(player: Player): boolean
 	return not removingPlayers[player] and player.Parent == Players
 end
 
+-- Concatenates queues in descending priority order (Max [4], High [3], Medium [2], Low [1]).
+-- If all data belongs to a single priority, compacts that buffer directly to avoid allocation.
 @native
 const function flushPriorityQueues(queues: PriorityQueues): buffer?
 	const s4 = queues[4].size
@@ -120,6 +129,8 @@ const function serializeToScratch<T>(packetDef: Types.PacketDefinition<T>, data:
 	return scratchRaw, payloadLen
 end
 
+-- Zero-copy fast path: when the schema has a known fixed size, serializes directly
+-- into the destination buffer to avoid intermediate scratch copying.
 @native
 const function writeFixedToBuffer<T>(
 	target: ByteBuffer.ByteBuffer,
@@ -487,6 +498,8 @@ function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketD
 	enqueuePreSerializedVerified(player, packetDef, scratchRaw, payloadLen)
 end
 
+-- Serializes once to the scratch buffer, copying the pre-serialized slice into each
+-- recipient's queue to eliminate repeated encoding work across multiple players.
 function OutgoingQueue.serverEnqueueList<T>(players: { Player }, packetDef: Types.PacketDefinition<T>, data: T)
 	if #players == 0 then
 		return

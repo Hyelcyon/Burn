@@ -29,6 +29,12 @@ const Auto = require("@datatypes/Auto")
 const Bitfield = require("@datatypes/Bitfield")
 const VarInt = require("@datatypes/VarInt")
 
+--[=[
+	@class DataTypes
+	@within Burn
+	Registry of primitive types, Roblox engine types, composite structures, and collections
+	for binary serialization and deserialization.
+]=]
 return table.freeze({
 	u8 = u8,
 	u16 = u16,

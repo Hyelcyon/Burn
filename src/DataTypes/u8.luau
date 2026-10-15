@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	Unsigned 8-bit integer TypeDescriptor (range [0, 255]).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: number): number
 	buffer.writeu8(buf, offset, value)

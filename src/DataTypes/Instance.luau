@@ -1,5 +1,10 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	2-byte placeholder TypeDescriptor for Instance references.
+	Raw Luau buffers cannot store Roblox instance pointers directly without external ID mapping.
+]=]
 @native
 const function write(buf: buffer, offset: number, _value: Instance?): number
 	buffer.writeu16(buf, offset, 0)

@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	Raw binary buffer TypeDescriptor prefixed with a 4-byte (u32) byte length.
+]=]
 @native
 const function write(buf: buffer, offset: number, value: buffer): number
 	const len = buffer.len(value)

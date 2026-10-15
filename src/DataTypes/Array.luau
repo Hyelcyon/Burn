@@ -2,6 +2,10 @@
 
 const Types = require("@src/Types")
 
+--[=[
+	@within DataTypes
+	Creates a variable-length list TypeDescriptor with a 2-byte (u16) element count prefix.
+]=]
 const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeDescriptor<{ T }>
 	const elemWrite = elementDescriptor.write
 	const elemRead = elementDescriptor.read
@@ -39,6 +43,7 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeD
 	local skip: (buf: buffer, offset: number) -> number
 	const elemSize = elementDescriptor.size
 	if elemSize ~= nil then
+		-- O(1) skip: Fixed-size elements allow calculating the total payload offset without loop traversal.
 		@native
 		local function skipFixed(buf: buffer, offset: number): number
 			const count = buffer.readu16(buf, offset)

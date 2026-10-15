@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	Unsigned 32-bit integer TypeDescriptor (range [0, 4,294,967,295], little-endian).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: number): number
 	buffer.writeu32(buf, offset, value)

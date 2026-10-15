@@ -13,6 +13,11 @@ const function skip(_buf: buffer, offset: number): number
 	return offset + 2
 end
 
+--[=[
+	@within DataTypes
+	Creates an EnumItem TypeDescriptor that serializes the integer `.Value` as a 2-byte (u16) integer,
+	resolving back to the EnumItem on read using a pre-indexed value lookup table.
+]=]
 const function createEnumItemDescriptor(enumType): Types.TypeDescriptor<EnumItem>
 	const itemsByValue: { [number]: EnumItem } = {}
 	for _, item in enumType:GetEnumItems() do

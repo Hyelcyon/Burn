@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	Unsigned 16-bit integer TypeDescriptor (range [0, 65,535], little-endian).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: number): number
 	buffer.writeu16(buf, offset, value)

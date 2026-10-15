@@ -5,6 +5,13 @@ const vec3 = require("@datatypes/Vector3")
 const cf = require("@datatypes/CFrame")
 const color3 = require("@datatypes/Color3")
 
+--[=[
+	@within DataTypes
+	Self-describing dynamic serializer for untyped or heterogeneous values.
+
+	Wire header: 1 byte where upper 4 bits encode the type tag (0x0-0xF) and lower 4 bits
+	encode inline payload metadata (boolean flag, 0-15 small integer, or length <= 14).
+]=]
 const TAG_NIL = 0x0
 const TAG_BOOLEAN = 0x1
 const TAG_SMALL_INT = 0x2
@@ -22,6 +29,8 @@ const TAG_SHORT_ARRAY = 0xD
 const TAG_LONG_ARRAY = 0xE
 const TAG_MAP = 0xF
 
+-- Numbers are dynamically packed into the narrowest lossless representation:
+-- small int 0-15 (1 byte total), i8 (2 bytes), i16 (3 bytes), i32 (5 bytes), or f64 (9 bytes).
 @native
 const function write(buf: buffer, offset: number, value: unknown): number
 	if value == nil then

@@ -24,6 +24,13 @@ type RateLimit = {
 	currentBytes: number,
 }
 
+--[=[
+	@class Server
+	@server
+	@within Burn
+	Server-side networking module handling packet dispatch, token-bucket rate limiting,
+	DoS batch guards, and two-way request handling.
+]=]
 const Server = {}
 
 local listenerHeads: { [number]: ListenerNode? } = {}
@@ -40,6 +47,8 @@ const function isPlayerActive(player: Player): boolean
 	return not removingPlayers[player] and player.Parent == Players
 end
 
+-- Token bucket rate limiter replenishing at 64 KB/sec. Every incoming packet is charged
+-- a minimum of MIN_PACKET_COST_BYTES (32 bytes) to penalize zero-byte and malformed flood attacks.
 @native
 const function checkRateLimit(player: Player, size: number): boolean
 	local limit: RateLimit
@@ -73,6 +82,8 @@ end
 
 const packetsById = Registry.rawById
 
+-- Parses sequential packets from an incoming buffer.
+-- Terminated if packet count exceeds MAX_PACKETS_PER_BATCH (256) to bound CPU execution time.
 @native
 const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, expectedType: Types.PacketType)
 	local offset = 0
@@ -120,6 +131,8 @@ const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, e
 	end
 end
 
+-- Validates rate limits and isolates batch decoding within a pcall to ensure malformed
+-- or adversarial client buffers are dropped without terminating server frame execution.
 const function decodeAndDispatch(player: Player, rawBuf: buffer, expectedType: Types.PacketType)
 	const bufLen = buffer.len(rawBuf)
 	if bufLen < Constants.HEADER_SIZE or bufLen > Constants.MAX_PACKET_SIZE then
@@ -288,6 +301,9 @@ function Server.broadcastImmediate<T>(packetDef: Types.PacketDefinition<T>, data
 	OutgoingQueue.serverBroadcastImmediate(packetDef, data)
 end
 
+--[=[
+	Registers a persistent listener callback on the server for incoming client packets.
+]=]
 function Server.on<T>(packetDef: Types.PacketDefinition<T>, listener: (Player, T) -> ()): Connection
 	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
 		error(`Cannot register event listener for Request packet '{packetDef.name}'`)
@@ -335,6 +351,9 @@ function Server.on<T>(packetDef: Types.PacketDefinition<T>, listener: (Player, T
 	}
 end
 
+--[=[
+	Registers a synchronous request-response handler for two-way client invocations.
+]=]
 function Server.handleRequest<Req, Res>(
 	packetDef: Types.PacketDefinition<Req>,
 	responseSchema: Types.TypeDescriptor<Res>,

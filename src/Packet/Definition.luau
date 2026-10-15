@@ -6,6 +6,8 @@ export type PacketType = Types.PacketType
 export type PacketPriority = Types.PacketPriority
 export type PacketDefinition<T> = Types.PacketDefinition<T>
 
+-- Maps priority labels to 1-based buffer queue indices (1=Low, 2=Medium, 3=High, 4=Max).
+-- Queues are drained in descending index order (4 down to 1) when flushing batched frames.
 const function priorityToIndex(priority: PacketPriority?): (PacketPriority, number)
 	if priority == "Max" then
 		return "Max", 4
@@ -18,6 +20,10 @@ const function priorityToIndex(priority: PacketPriority?): (PacketPriority, numb
 	end
 end
 
+--[=[
+	@within Packet
+	Validates packet parameters and constructs an immutable PacketDefinition.
+]=]
 const function definePacket<T>(
 	id: number,
 	name: string,

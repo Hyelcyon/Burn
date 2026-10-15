@@ -1,5 +1,10 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	Signed 24-bit integer TypeDescriptor (range [-8,388,608, 8,388,607]).
+	Encoded in 3 bytes: little-endian u16 low bits + i8 sign-extended high bits.
+]=]
 @native
 const function write(buf: buffer, offset: number, value: number): number
 	buffer.writeu16(buf, offset, bit32.band(value, 0xFFFF))

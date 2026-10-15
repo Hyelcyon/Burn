@@ -6,6 +6,11 @@ const Definition = require("@packet/Definition")
 
 export type PacketOptions = Types.PacketOptions
 
+--[=[
+	@class Registry
+	@within Packet
+	Central registry mapping unique packet names and 1-byte wire IDs (0-255).
+]=]
 const Registry = {}
 
 local packetsById: { [number]: Types.ErasedPacketDefinition } = {}
@@ -14,6 +19,10 @@ local nextAutoId = 1
 
 Registry.rawById = packetsById
 
+--[=[
+	Registers a packet definition with a unique name, wire transport type, and payload schema.
+	Allocates the lowest available numeric ID if none is explicitly specified.
+]=]
 function Registry.register<T>(
 	name: string,
 	packetType: Types.PacketType,

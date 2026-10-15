@@ -20,6 +20,11 @@ end
 
 export type BitfieldDescriptor<F> = Types.TypeDescriptor<InferBitfieldType<F>>
 
+--[=[
+	@within DataTypes
+	Creates a Bitfield TypeDescriptor packing between 1 and 32 named boolean flags
+	into a 1 to 4 byte compact integer.
+]=]
 const function Bitfield<F>(flagList: F & { [number]: string }): BitfieldDescriptor<F>
 	type T = InferBitfieldType<F>
 
@@ -33,11 +38,14 @@ const function Bitfield<F>(flagList: F & { [number]: string }): BitfieldDescript
 		error(`[Burn] Bitfield requires between 1 and 32 flags, got {count}`)
 	end
 
+	-- Minimum byte width: 1-8 flags -> 1 byte (u8), 9-16 -> 2 bytes (u16),
+	-- 17-24 -> 3 bytes (u16+u8), 25-32 -> 4 bytes (u32).
 	const byteSize = if count <= 8 then 1 elseif count <= 16 then 2 elseif count <= 24 then 3 else 4
 
 	local write: (buf: buffer, offset: number, value: T) -> number
 	local read: (buf: buffer, offset: number) -> (T, number)
 
+	-- Direct branchless masks for 1-4 flags avoid loop and bit-shift overhead.
 	if count == 1 then
 		const k1 = keys[1]
 		write = function(buf: buffer, offset: number, value: T): number

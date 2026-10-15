@@ -2,6 +2,10 @@
 
 const Types = require("@src/Types")
 
+--[=[
+	@within DataTypes
+	Creates an Optional TypeDescriptor prefixed with a 1-byte presence flag (0 = nil, 1 = present).
+]=]
 const function Optional<T>(descriptor: Types.TypeDescriptor<T>): Types.TypeDescriptor<T?>
 	const innerWrite = descriptor.write
 	const innerRead = descriptor.read

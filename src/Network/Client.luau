@@ -18,6 +18,13 @@ type ListenerNode = {
 	prev: ListenerNode?,
 }
 
+--[=[
+	@class Client
+	@client
+	@within Burn
+	Client-side networking module handling packet dispatch, stream frame validation,
+	and synchronous two-way request invocations.
+]=]
 const Client = {}
 
 local listenerHeads: { [number]: ListenerNode? } = {}
@@ -37,6 +44,7 @@ const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
 		const payloadStart = offset + Constants.HEADER_SIZE
 		const nextOffset = payloadStart + payloadLen
 
+		-- Guard against truncated frames where the advertised payload exceeds the buffer.
 		if nextOffset > bufLen then
 			break
 		end
@@ -46,6 +54,8 @@ const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
 			const packetDef = packetsById[packetId]
 			if packetDef ~= nil and packetDef.packetType == expectedType then
 				const data, readEndOffset = packetDef.schema.read(rawBuf, payloadStart)
+				-- Deserializer must consume exactly the advertised payload bytes.
+				-- Any discrepancy indicates stream corruption or schema drift; abort batch to prevent desync.
 				if typeof(readEndOffset) == "number" and readEndOffset ~= nextOffset then
 					break
 				end
@@ -98,6 +108,10 @@ function Client.sendImmediate<T>(packetDef: Types.PacketDefinition<T>, data: T)
 	OutgoingQueue.clientSendImmediate(packetDef, data)
 end
 
+--[=[
+	Registers a persistent packet listener. Returns a Connection whose `:disconnect()`
+	unlinks the node in O(1) time without shifting listener arrays.
+]=]
 function Client.on<T>(packetDef: Types.PacketDefinition<T>, listener: (T) -> ()): Connection
 	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
 		error(`Cannot register event listener for Request packet '{packetDef.name}'`)
@@ -146,6 +160,10 @@ function Client.on<T>(packetDef: Types.PacketDefinition<T>, listener: (T) -> ())
 	}
 end
 
+--[=[
+	Sends a two-way request to the server and returns the decoded response, or nil on failure.
+	@yields
+]=]
 function Client.invoke<Req, Res>(
 	packetDef: Types.PacketDefinition<Req>,
 	responseSchema: Types.TypeDescriptor<Res>,

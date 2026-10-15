@@ -1,5 +1,11 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	48-bit (6-byte) floating-point TypeDescriptor.
+	Truncates the 16 least-significant mantissa bits of a little-endian IEEE 754 double (bytes 0-1),
+	preserving full dynamic range (sign + 11-bit exponent) and 36 bits of precision while saving 2 bytes.
+]=]
 const scratch = buffer.create(8)
 
 @native

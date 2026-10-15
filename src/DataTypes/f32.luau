@@ -1,5 +1,9 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	32-bit IEEE 754 single-precision floating-point TypeDescriptor (4 bytes, little-endian).
+]=]
 @native
 const function write(buf: buffer, offset: number, value: number): number
 	buffer.writef32(buf, offset, value)

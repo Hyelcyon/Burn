@@ -1,5 +1,11 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	16-bit (2-byte) Color3 TypeDescriptor packed using the RGB565 format.
+	Layout: R = 5 bits [15:11], G = 6 bits [10:5], B = 5 bits [4:0].
+	Green is allocated 6 bits to match human visual sensitivity.
+]=]
 @native
 const function write(buf: buffer, offset: number, value: Color3): number
 	const r = math.round(value.R * 31)

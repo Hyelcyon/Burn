@@ -2,6 +2,10 @@
 
 const Types = require("@src/Types")
 
+--[=[
+	@within DataTypes
+	Creates a dictionary TypeDescriptor with a 2-byte (u16) entry count prefix followed by key-value pairs.
+]=]
 const function Map<K, V>(
 	keyDescriptor: Types.TypeDescriptor<K>,
 	valueDescriptor: Types.TypeDescriptor<V>
@@ -16,6 +20,7 @@ const function Map<K, V>(
 
 	@native
 	const function write(buf: buffer, offset: number, dict: { [K]: V }): number
+		-- Reserve 2 bytes for the entry count, counting entries during traversal to avoid a pre-pass.
 		local currentOffset = offset + 2
 		local count = 0
 
@@ -49,6 +54,7 @@ const function Map<K, V>(
 	local skip: (buf: buffer, offset: number) -> number
 	if keyDescriptor.size ~= nil and valueDescriptor.size ~= nil then
 		const fixedEntrySize = keyDescriptor.size + valueDescriptor.size
+		-- O(1) skip: When both key and value have known static sizes, skip computes offset directly.
 		@native
 		local function skipFixed(buf: buffer, offset: number): number
 			const count = buffer.readu16(buf, offset)

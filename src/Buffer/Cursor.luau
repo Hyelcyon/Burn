@@ -2,6 +2,10 @@
 
 const Types = require("@src/Types")
 
+--[=[
+	@class Cursor
+	Sequential read cursor tracking byte offset into an underlying buffer.
+]=]
 export type Cursor = {
 	raw: buffer,
 	offset: number,
@@ -9,6 +13,9 @@ export type Cursor = {
 
 const Cursor = {}
 
+--[=[
+	Wraps a buffer into a Cursor starting at `initialOffset` (defaults to 0).
+]=]
 @native
 function Cursor.new(raw: buffer, initialOffset: number?): Cursor
 	return {
@@ -80,21 +87,33 @@ function Cursor.readString(self: Cursor, count: number): string
 	return value
 end
 
+--[=[
+	Advances the cursor offset by `count` bytes without decoding data.
+]=]
 @native
 function Cursor.skip(self: Cursor, count: number): ()
 	self.offset += count
 end
 
+--[=[
+	Advances the cursor offset past the encoded representation using the descriptor's `skip` logic.
+]=]
 @native
 function Cursor.skipType<T>(self: Cursor, descriptor: Types.TypeDescriptor<T>): ()
 	self.offset = descriptor.skip(self.raw, self.offset)
 end
 
+--[=[
+	Returns the number of unread bytes remaining before end of buffer.
+]=]
 @native
 function Cursor.remaining(self: Cursor): number
 	return buffer.len(self.raw) - self.offset
 end
 
+--[=[
+	Returns whether the cursor offset has reached or exceeded buffer capacity.
+]=]
 @native
 function Cursor.isEOF(self: Cursor): boolean
 	return self.offset >= buffer.len(self.raw)

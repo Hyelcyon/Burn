@@ -18,6 +18,11 @@ export type Connection = Types.Connection
 export type ByteBuffer = Buffer.ByteBuffer
 export type Cursor = Buffer.Cursor
 
+--[=[
+	@class Burn
+	Compact binary networking library for Roblox built on Luau `buffer`.
+]=]
+
 const isServer = RunService:IsServer()
 const isClient = RunService:IsClient()
 
@@ -25,6 +30,10 @@ export type ServerListener<T> = (Player, T) -> ()
 export type ClientListener<T> = (T) -> ()
 export type Listener<T> = ServerListener<T> | ClientListener<T>
 
+--[=[
+	Registers a persistent listener for incoming packets.
+	On the server, listener receives `(player, data)`. On the client, listener receives `(data)`.
+]=]
 const function on<T>(packet: Types.PacketDefinition<T>, listener: Listener<T>): Types.Connection
 	if isServer then
 		return Network.Server.on(packet, listener :: ServerListener<T>)
@@ -33,6 +42,9 @@ const function on<T>(packet: Types.PacketDefinition<T>, listener: Listener<T>): 
 	end
 end
 
+--[=[
+	Registers a one-shot listener that unregisters itself before invoking the callback.
+]=]
 const function once<T>(packet: Types.PacketDefinition<T>, listener: Listener<T>): Types.Connection
 	if isServer then
 		const serverListener = listener :: ServerListener<T>
@@ -53,6 +65,11 @@ const function once<T>(packet: Types.PacketDefinition<T>, listener: Listener<T>)
 	end
 end
 
+--[=[
+	Yields the running thread until a matching packet arrives.
+	Resumes with `(player, data)` on the server and `(data)` on the client.
+	@yields
+]=]
 const function wait<T>(packet: Types.PacketDefinition<T>)
 	const thread = coroutine.running()
 	if isServer then
@@ -72,6 +89,9 @@ const function wait<T>(packet: Types.PacketDefinition<T>)
 	end
 end
 
+--[=[
+	Enqueues a packet into the outgoing priority queue for frame-batched transmission on Heartbeat.
+]=]
 const function send<T>(
 	target: Player | { Player } | Types.PacketDefinition<T>,
 	packetOrData: Types.PacketDefinition<T> | T,
@@ -88,6 +108,9 @@ const function send<T>(
 	end
 end
 
+--[=[
+	Serializes and sends a packet immediately, bypassing frame batching.
+]=]
 const function sendImmediate<T>(
 	target: Player | { Player } | Types.PacketDefinition<T>,
 	packetOrData: Types.PacketDefinition<T> | T,
@@ -108,26 +131,47 @@ const function sendImmediate<T>(
 	end
 end
 
+--[=[
+	Enqueues a packet to be sent to all connected clients on next Heartbeat flush.
+	@server
+]=]
 const function broadcast<T>(packet: Types.PacketDefinition<T>, data: T)
 	assert(isServer, "Burn.broadcast can only be called on the server")
 	Network.Server.broadcast(packet, data)
 end
 
+--[=[
+	Enqueues a packet to all connected clients except `excludedPlayer`.
+	@server
+]=]
 const function broadcastExcept<T>(excludedPlayer: Player, packet: Types.PacketDefinition<T>, data: T)
 	assert(isServer, "Burn.broadcastExcept can only be called on the server")
 	Network.Server.broadcastExcept(excludedPlayer, packet, data)
 end
 
+--[=[
+	Sends an immediate packet to all connected clients without frame batching.
+	@server
+]=]
 const function broadcastImmediate<T>(packet: Types.PacketDefinition<T>, data: T)
 	assert(isServer, "Burn.broadcastImmediate can only be called on the server")
 	Network.Server.broadcastImmediate(packet, data)
 end
 
+--[=[
+	Invokes the server synchronously and yields until response is returned or rejected.
+	@client
+	@yields
+]=]
 const function invoke<Req, Res>(packet: Types.PacketDefinition<Req>, responseSchema: Types.TypeDescriptor<Res>, data: Req): Res?
 	assert(isClient, "Burn.invoke can only be called on the client")
 	return Network.Client.invoke(packet, responseSchema, data)
 end
 
+--[=[
+	Registers a server-side request handler for two-way client invocations.
+	@server
+]=]
 const function handleRequest<Req, Res>(
 	packet: Types.PacketDefinition<Req>,
 	responseSchema: Types.TypeDescriptor<Res>,
@@ -137,6 +181,9 @@ const function handleRequest<Req, Res>(
 	Network.Server.handleRequest(packet, responseSchema, handler)
 end
 
+--[=[
+	Registers a network packet with a schema, transport type, and optional ID/priority.
+]=]
 const function definePacket<T>(
 	name: string,
 	packetType: Types.PacketType,

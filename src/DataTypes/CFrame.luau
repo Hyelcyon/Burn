@@ -1,5 +1,11 @@
 --!strict
 
+--[=[
+	@within DataTypes
+	28-byte compact CFrame representation:
+	- Position: 3x f32 vector (12 bytes)
+	- Rotation: 4x f32 unit quaternion (16 bytes)
+]=]
 @native
 const function write(buf: buffer, offset: number, value: CFrame): number
 	const x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = value:GetComponents()
@@ -9,6 +15,8 @@ const function write(buf: buffer, offset: number, value: CFrame): number
 	local qz: number
 	local qw: number
 
+	-- Shepperd's algorithm: branch on the maximum diagonal element or trace to maximize the divisor
+	-- and prevent numerical instability / division by zero near rotational singularities.
 	const trace = r00 + r11 + r22
 	if trace > 0 then
 		const s = math.sqrt(trace + 1.0) * 2
