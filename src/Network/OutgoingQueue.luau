@@ -16,10 +16,10 @@ const OutgoingQueue = {}
 
 const function createPriorityQueues(): PriorityQueues
 	return {
-		[1] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY), -- Low
-		[2] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY), -- Medium
-		[3] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY), -- High
-		[4] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY), -- Max
+		[1] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY),
+		[2] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY),
+		[3] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY),
+		[4] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY),
 	}
 end
 
@@ -55,7 +55,6 @@ const function flushPriorityQueues(queues: PriorityQueues): buffer?
 		return nil
 	end
 
-	-- Fast path: only one priority has data
 	if s4 == total then
 		const compacted = ByteBuffer.compact(queues[4])
 		ByteBuffer.reset(queues[4])
@@ -74,7 +73,6 @@ const function flushPriorityQueues(queues: PriorityQueues): buffer?
 		return compacted
 	end
 
-	-- Multi-priority path: combine in descending priority order (Max -> High -> Medium -> Low)
 	const out = buffer.create(total)
 	local offset = 0
 	if s4 > 0 then

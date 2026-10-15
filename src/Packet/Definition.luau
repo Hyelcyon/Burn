@@ -18,18 +18,6 @@ const function priorityToIndex(priority: PacketPriority?): (PacketPriority, numb
 	end
 end
 
---[=[
-	@function definePacket
-	@within PacketDefinition
-	@param id number -- Unique 1-byte packet identifier (0..255)
-	@param name string -- Non-empty human-readable identifier
-	@param packetType PacketType -- "Reliable" | "Unreliable" | "Request"
-	@param schema TypeDescriptor<T> -- Binary serialization descriptor
-	@param priority PacketPriority? -- Priority channel ("Low" | "Medium" | "High" | "Max")
-	@return PacketDefinition<T>
-
-	Constructs an immutable PacketDefinition object with precomputed priority indices.
-]=]
 const function definePacket<T>(
 	id: number,
 	name: string,

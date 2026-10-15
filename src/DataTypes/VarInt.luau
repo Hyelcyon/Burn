@@ -87,29 +87,11 @@ end
 @native
 const function readVarI32(buf: buffer, offset: number): (number, number)
 	const raw, nextOff = readVarU32(buf, offset)
+
 	const decoded = if bit32.btest(raw, 1) then -(bit32.rshift(raw, 1) + 1) else bit32.rshift(raw, 1)
 	return decoded, nextOff
 end
 
---[=[
-	@prop VarU32 TypeDescriptor<number>
-	@within DataTypes
-
-	Variable-length unsigned 32-bit integer serializer using LEB128 encoding.
-	Encodes small integers in fewer bytes:
-	- `0 ~ 127`: **1 byte** (75% bandwidth savings over fixed `u32`)
-	- `128 ~ 16,383`: **2 bytes** (50% bandwidth savings)
-	- `16,384 ~ 2,097,151`: **3 bytes**
-	- `2,097,152 ~ 268,435,455`: **4 bytes**
-	- `268,435,456+`: **5 bytes**
-
-	```lua
-	local ItemPacket = Burn.definePacket("ItemPurchased", "Reliable", Burn.Types.Struct({
-		itemId = Burn.Types.varu32,
-		quantity = Burn.Types.varu32,
-	}))
-	```
-]=]
 const VarU32: Types.TypeDescriptor<number> = table.freeze({
 	size = nil,
 	write = writeVarU32,
@@ -117,16 +99,6 @@ const VarU32: Types.TypeDescriptor<number> = table.freeze({
 	skip = skipVarU32,
 })
 
---[=[
-	@prop VarI32 TypeDescriptor<number>
-	@within DataTypes
-
-	Variable-length signed 32-bit integer serializer combining Zigzag encoding with LEB128.
-	Maps negative and positive integers alternatingly so small magnitude numbers take fewer bytes:
-	- `-64 ~ 63`: **1 byte** (75% bandwidth savings over fixed `i32`)
-	- `-8,192 ~ 8,191`: **2 bytes** (50% bandwidth savings)
-	- `-1,048,576 ~ 1,048,575`: **3 bytes**
-]=]
 const VarI32: Types.TypeDescriptor<number> = table.freeze({
 	size = nil,
 	write = writeVarI32,
