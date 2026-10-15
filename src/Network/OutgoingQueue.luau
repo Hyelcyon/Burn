@@ -8,22 +8,35 @@ const Types = require("@src/Types")
 const ByteBuffer = require("@buffer/ByteBuffer")
 const Channel = require("@network/Channel")
 
+type PriorityQueues = {
+	[number]: ByteBuffer.ByteBuffer,
+}
+
 const OutgoingQueue = {}
 
-local clientReliable = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY)
-local clientUnreliable = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY)
+const function createPriorityQueues(): PriorityQueues
+	return {
+		[1] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY), -- Low
+		[2] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY), -- Medium
+		[3] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY), -- High
+		[4] = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY), -- Max
+	}
+end
 
-local playerReliable: { [Player]: ByteBuffer.ByteBuffer? } = {}
-local playerUnreliable: { [Player]: ByteBuffer.ByteBuffer? } = {}
-local broadcastReliable = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY)
-local broadcastUnreliable = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY)
+local clientReliable = createPriorityQueues()
+local clientUnreliable = createPriorityQueues()
+
+local playerReliable: { [Player]: PriorityQueues? } = {}
+local playerUnreliable: { [Player]: PriorityQueues? } = {}
+local broadcastReliable = createPriorityQueues()
+local broadcastUnreliable = createPriorityQueues()
 
 local activeReliablePlayers: { Player } = {}
 local isReliablePlayerDirty: { [Player]: boolean? } = {}
 local activeUnreliablePlayers: { Player } = {}
 local isUnreliablePlayerDirty: { [Player]: boolean? } = {}
 
-local removingPlayers: { [Player]: boolean? } = (setmetatable({}, { __mode = "k" }) :: any) :: { [Player]: boolean? }
+local removingPlayers = setmetatable({} :: { [Player]: boolean? }, { __mode = "k" })
 local isInitialized = false
 local isClientChannelReady = false
 
@@ -32,27 +45,103 @@ const function isPlayerActive(player: Player): boolean
 end
 
 @native
-const function serializeToScratch(packetDef: Types.PacketDefinition<any>, data: any): (buffer, number)
+const function flushPriorityQueues(queues: PriorityQueues): buffer?
+	const s4 = queues[4].size
+	const s3 = queues[3].size
+	const s2 = queues[2].size
+	const s1 = queues[1].size
+	const total = s4 + s3 + s2 + s1
+	if total == 0 then
+		return nil
+	end
+
+	-- Fast path: only one priority has data
+	if s4 == total then
+		const compacted = ByteBuffer.compact(queues[4])
+		ByteBuffer.reset(queues[4])
+		return compacted
+	elseif s3 == total then
+		const compacted = ByteBuffer.compact(queues[3])
+		ByteBuffer.reset(queues[3])
+		return compacted
+	elseif s2 == total then
+		const compacted = ByteBuffer.compact(queues[2])
+		ByteBuffer.reset(queues[2])
+		return compacted
+	elseif s1 == total then
+		const compacted = ByteBuffer.compact(queues[1])
+		ByteBuffer.reset(queues[1])
+		return compacted
+	end
+
+	-- Multi-priority path: combine in descending priority order (Max -> High -> Medium -> Low)
+	const out = buffer.create(total)
+	local offset = 0
+	if s4 > 0 then
+		buffer.copy(out, offset, queues[4].raw, 0, s4)
+		offset += s4
+		ByteBuffer.reset(queues[4])
+	end
+	if s3 > 0 then
+		buffer.copy(out, offset, queues[3].raw, 0, s3)
+		offset += s3
+		ByteBuffer.reset(queues[3])
+	end
+	if s2 > 0 then
+		buffer.copy(out, offset, queues[2].raw, 0, s2)
+		offset += s2
+		ByteBuffer.reset(queues[2])
+	end
+	if s1 > 0 then
+		buffer.copy(out, offset, queues[1].raw, 0, s1)
+		offset += s1
+		ByteBuffer.reset(queues[1])
+	end
+
+	return out
+end
+
+@native
+const function serializeToScratch<T>(packetDef: Types.PacketDefinition<T>, data: T): (buffer, number)
 	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
 		error(`Packet '{packetDef.name}' has type '{packetDef.packetType}' and cannot be sent as an event`)
 	end
 
-	const scratch = ByteBuffer.getScratch()
-	const schemaSize = packetDef.schema.size
-	const capacity = if typeof(schemaSize) == "number" then schemaSize else Constants.MAX_PACKET_SIZE
-	ByteBuffer.ensureCapacity(scratch, capacity)
-
-	const payloadLen = packetDef.schema.write(scratch.raw, 0, data)
+	const scratchRaw = ByteBuffer.getScratchRaw()
+	const payloadLen = packetDef.schema.write(scratchRaw, 0, data)
 	if payloadLen < 0 or payloadLen > Constants.MAX_PAYLOAD_SIZE then
 		error(
 			`Packet '{packetDef.name}' payload ({payloadLen} bytes) exceeds limit ({Constants.MAX_PAYLOAD_SIZE} bytes)`
 		)
 	end
+	const schemaSize = packetDef.schema.size
 	if typeof(schemaSize) == "number" and payloadLen ~= schemaSize then
 		error(`Packet '{packetDef.name}' wrote {payloadLen} bytes, expected fixed size {schemaSize}`)
 	end
 
-	return scratch.raw, payloadLen
+	return scratchRaw, payloadLen
+end
+
+@native
+const function writeFixedToBuffer<T>(
+	target: ByteBuffer.ByteBuffer,
+	packetDef: Types.PacketDefinition<T>,
+	schemaSize: number,
+	data: T
+)
+	const packetTotal = Constants.HEADER_SIZE + schemaSize
+	const targetOffset = target.size
+	const totalNeeded = targetOffset + packetTotal
+	ByteBuffer.ensureCapacity(target, totalNeeded)
+
+	buffer.writeu8(target.raw, targetOffset, packetDef.id)
+	buffer.writeu16(target.raw, targetOffset + 1, schemaSize)
+	const writtenLen = packetDef.schema.write(target.raw, targetOffset + Constants.HEADER_SIZE, data)
+	if writtenLen ~= schemaSize then
+		error(`Packet '{packetDef.name}' wrote {writtenLen} bytes, expected fixed size {schemaSize}`)
+	end
+
+	target.size = totalNeeded
 end
 
 @native
@@ -63,20 +152,49 @@ const function writeSerializedToBuffer(
 	payloadLen: number
 )
 	const packetTotal = Constants.HEADER_SIZE + payloadLen
-	const totalNeeded = target.size + packetTotal
+	const targetOffset = target.size
+	const totalNeeded = targetOffset + packetTotal
 	ByteBuffer.ensureCapacity(target, totalNeeded)
 
-	buffer.writeu8(target.raw, target.size, packetId)
-	buffer.writeu16(target.raw, target.size + 1, payloadLen)
+	buffer.writeu8(target.raw, targetOffset, packetId)
+	buffer.writeu16(target.raw, targetOffset + 1, payloadLen)
 	if payloadLen > 0 then
-		buffer.copy(target.raw, target.size + Constants.HEADER_SIZE, payloadBuf, 0, payloadLen)
+		buffer.copy(target.raw, targetOffset + Constants.HEADER_SIZE, payloadBuf, 0, payloadLen)
 	end
 
 	target.size = totalNeeded
 end
 
 @native
-const function buildImmediateBuffer(packetDef: Types.PacketDefinition<any>, data: any): buffer
+const function buildImmediateBuffer<T>(packetDef: Types.PacketDefinition<T>, data: T): buffer
+	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
+		error(`Packet '{packetDef.name}' has type '{packetDef.packetType}' and cannot be sent as an event`)
+	end
+
+	const schemaSize = packetDef.schema.size
+	if typeof(schemaSize) == "number" then
+		if schemaSize < 0 or schemaSize > Constants.MAX_PAYLOAD_SIZE then
+			error(
+				`Packet '{packetDef.name}' payload ({schemaSize} bytes) exceeds limit ({Constants.MAX_PAYLOAD_SIZE} bytes)`
+			)
+		end
+		const packetTotal = Constants.HEADER_SIZE + schemaSize
+		if packetDef.packetType == "Unreliable" and packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+			error(
+				`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
+			)
+		end
+
+		const out = buffer.create(packetTotal)
+		buffer.writeu8(out, 0, packetDef.id)
+		buffer.writeu16(out, 1, schemaSize)
+		const writtenLen = packetDef.schema.write(out, Constants.HEADER_SIZE, data)
+		if writtenLen ~= schemaSize then
+			error(`Packet '{packetDef.name}' wrote {writtenLen} bytes, expected fixed size {schemaSize}`)
+		end
+		return out
+	end
+
 	const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
 	const packetTotal = Constants.HEADER_SIZE + payloadLen
 	if packetDef.packetType == "Unreliable" and packetTotal > Constants.MAX_UNRELIABLE_BYTES then
@@ -94,12 +212,12 @@ const function buildImmediateBuffer(packetDef: Types.PacketDefinition<any>, data
 	return out
 end
 
-const function getPlayerBuffer(dict: { [Player]: ByteBuffer.ByteBuffer? }, player: Player): ByteBuffer.ByteBuffer
+const function getPlayerQueues(dict: { [Player]: PriorityQueues? }, player: Player): PriorityQueues
 	const existing = dict[player]
 	if existing ~= nil then
 		return existing
 	end
-	const created = ByteBuffer.create(Constants.DEFAULT_BUFFER_CAPACITY)
+	const created = createPriorityQueues()
 	dict[player] = created
 	return created
 end
@@ -122,39 +240,39 @@ function OutgoingQueue.init()
 		end)
 
 		RunService.Heartbeat:Connect(function()
-			if broadcastReliable.size > 0 then
-				const buf = ByteBuffer.compact(broadcastReliable)
-				ByteBuffer.reset(broadcastReliable)
-				Channel.getReliableEvent():FireAllClients(buf)
+			const bRel = flushPriorityQueues(broadcastReliable)
+			if bRel ~= nil then
+				Channel.getReliableEvent():FireAllClients(bRel)
 			end
 
-			if broadcastUnreliable.size > 0 then
-				const buf = ByteBuffer.compact(broadcastUnreliable)
-				ByteBuffer.reset(broadcastUnreliable)
-				Channel.getUnreliableEvent():FireAllClients(buf)
+			const bUnrel = flushPriorityQueues(broadcastUnreliable)
+			if bUnrel ~= nil then
+				Channel.getUnreliableEvent():FireAllClients(bUnrel)
 			end
 
 			for _, player in activeReliablePlayers do
-				const buf = playerReliable[player]
+				const pQueues = playerReliable[player]
 				if not isPlayerActive(player) then
 					playerReliable[player] = nil
-				elseif buf ~= nil and buf.size > 0 then
-					const compacted = ByteBuffer.compact(buf)
-					ByteBuffer.reset(buf)
-					Channel.getReliableEvent():FireClient(player, compacted)
+				elseif pQueues ~= nil then
+					const pRel = flushPriorityQueues(pQueues)
+					if pRel ~= nil then
+						Channel.getReliableEvent():FireClient(player, pRel)
+					end
 				end
 				isReliablePlayerDirty[player] = nil
 			end
 			table.clear(activeReliablePlayers)
 
 			for _, player in activeUnreliablePlayers do
-				const buf = playerUnreliable[player]
+				const pQueues = playerUnreliable[player]
 				if not isPlayerActive(player) then
 					playerUnreliable[player] = nil
-				elseif buf ~= nil and buf.size > 0 then
-					const compacted = ByteBuffer.compact(buf)
-					ByteBuffer.reset(buf)
-					Channel.getUnreliableEvent():FireClient(player, compacted)
+				elseif pQueues ~= nil then
+					const pUnrel = flushPriorityQueues(pQueues)
+					if pUnrel ~= nil then
+						Channel.getUnreliableEvent():FireClient(player, pUnrel)
+					end
 				end
 				isUnreliablePlayerDirty[player] = nil
 			end
@@ -172,16 +290,14 @@ function OutgoingQueue.init()
 				return
 			end
 
-			if clientReliable.size > 0 then
-				const buf = ByteBuffer.compact(clientReliable)
-				ByteBuffer.reset(clientReliable)
-				Channel.getReliableEvent():FireServer(buf)
+			const cRel = flushPriorityQueues(clientReliable)
+			if cRel ~= nil then
+				Channel.getReliableEvent():FireServer(cRel)
 			end
 
-			if clientUnreliable.size > 0 then
-				const buf = ByteBuffer.compact(clientUnreliable)
-				ByteBuffer.reset(clientUnreliable)
-				Channel.getUnreliableEvent():FireServer(buf)
+			const cUnrel = flushPriorityQueues(clientUnreliable)
+			if cUnrel ~= nil then
+				Channel.getUnreliableEvent():FireServer(cUnrel)
 			end
 		end)
 	end
@@ -191,6 +307,45 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 	if not isInitialized then
 		OutgoingQueue.init()
 	end
+
+	const priorityIndex = packetDef.priorityIndex
+	const schemaSize = packetDef.schema.size
+	if typeof(schemaSize) == "number" then
+		if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
+			error(`Packet '{packetDef.name}' has type '{packetDef.packetType}' and cannot be sent as an event`)
+		end
+		const packetTotal = Constants.HEADER_SIZE + schemaSize
+		if packetDef.packetType == "Unreliable" then
+			if packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+				error(
+					`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
+				)
+			end
+			const target = clientUnreliable[priorityIndex]
+			if
+				isClientChannelReady
+				and target.size > 0
+				and target.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES
+			then
+				const flushed = flushPriorityQueues(clientUnreliable)
+				if flushed ~= nil then
+					Channel.getUnreliableEvent():FireServer(flushed)
+				end
+			end
+			writeFixedToBuffer(target, packetDef, schemaSize, data)
+		else
+			const target = clientReliable[priorityIndex]
+			if isClientChannelReady and target.size > 0 and target.size + packetTotal > Constants.MAX_PACKET_SIZE then
+				const flushed = flushPriorityQueues(clientReliable)
+				if flushed ~= nil then
+					Channel.getReliableEvent():FireServer(flushed)
+				end
+			end
+			writeFixedToBuffer(target, packetDef, schemaSize, data)
+		end
+		return
+	end
+
 	const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
 	const packetTotal = Constants.HEADER_SIZE + payloadLen
 
@@ -200,27 +355,23 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 				`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
 			)
 		end
-		if
-			isClientChannelReady
-			and clientUnreliable.size > 0
-			and clientUnreliable.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES
-		then
-			const flushed = ByteBuffer.compact(clientUnreliable)
-			ByteBuffer.reset(clientUnreliable)
-			Channel.getUnreliableEvent():FireServer(flushed)
+		const target = clientUnreliable[priorityIndex]
+		if isClientChannelReady and target.size > 0 and target.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+			const flushed = flushPriorityQueues(clientUnreliable)
+			if flushed ~= nil then
+				Channel.getUnreliableEvent():FireServer(flushed)
+			end
 		end
-		writeSerializedToBuffer(clientUnreliable, packetDef.id, scratchRaw, payloadLen)
+		writeSerializedToBuffer(target, packetDef.id, scratchRaw, payloadLen)
 	else
-		if
-			isClientChannelReady
-			and clientReliable.size > 0
-			and clientReliable.size + packetTotal > Constants.MAX_PACKET_SIZE
-		then
-			const flushed = ByteBuffer.compact(clientReliable)
-			ByteBuffer.reset(clientReliable)
-			Channel.getReliableEvent():FireServer(flushed)
+		const target = clientReliable[priorityIndex]
+		if isClientChannelReady and target.size > 0 and target.size + packetTotal > Constants.MAX_PACKET_SIZE then
+			const flushed = flushPriorityQueues(clientReliable)
+			if flushed ~= nil then
+				Channel.getReliableEvent():FireServer(flushed)
+			end
 		end
-		writeSerializedToBuffer(clientReliable, packetDef.id, scratchRaw, payloadLen)
+		writeSerializedToBuffer(target, packetDef.id, scratchRaw, payloadLen)
 	end
 end
 
@@ -237,24 +388,28 @@ function OutgoingQueue.clientSendImmediate<T>(packetDef: Types.PacketDefinition<
 end
 
 @native
-const function enqueuePreSerializedVerified(
+const function enqueuePreSerializedVerified<T>(
 	player: Player,
-	packetDef: Types.PacketDefinition<any>,
+	packetDef: Types.PacketDefinition<T>,
 	scratchRaw: buffer,
 	payloadLen: number
 )
 	const packetTotal = Constants.HEADER_SIZE + payloadLen
+	const priorityIndex = packetDef.priorityIndex
+
 	if packetDef.packetType == "Unreliable" then
 		if packetTotal > Constants.MAX_UNRELIABLE_BYTES then
 			error(
 				`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
 			)
 		end
-		const buf = getPlayerBuffer(playerUnreliable, player)
+		const pQueues = getPlayerQueues(playerUnreliable, player)
+		const buf = pQueues[priorityIndex]
 		if buf.size > 0 and buf.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
-			const flushed = ByteBuffer.compact(buf)
-			ByteBuffer.reset(buf)
-			Channel.getUnreliableEvent():FireClient(player, flushed)
+			const flushed = flushPriorityQueues(pQueues)
+			if flushed ~= nil then
+				Channel.getUnreliableEvent():FireClient(player, flushed)
+			end
 		end
 		writeSerializedToBuffer(buf, packetDef.id, scratchRaw, payloadLen)
 		if not isUnreliablePlayerDirty[player] then
@@ -262,11 +417,13 @@ const function enqueuePreSerializedVerified(
 			table.insert(activeUnreliablePlayers, player)
 		end
 	else
-		const buf = getPlayerBuffer(playerReliable, player)
+		const pQueues = getPlayerQueues(playerReliable, player)
+		const buf = pQueues[priorityIndex]
 		if buf.size > 0 and buf.size + packetTotal > Constants.MAX_PACKET_SIZE then
-			const flushed = ByteBuffer.compact(buf)
-			ByteBuffer.reset(buf)
-			Channel.getReliableEvent():FireClient(player, flushed)
+			const flushed = flushPriorityQueues(pQueues)
+			if flushed ~= nil then
+				Channel.getReliableEvent():FireClient(player, flushed)
+			end
 		end
 		writeSerializedToBuffer(buf, packetDef.id, scratchRaw, payloadLen)
 		if not isReliablePlayerDirty[player] then
@@ -283,6 +440,51 @@ function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketD
 	if not isInitialized then
 		OutgoingQueue.init()
 	end
+
+	const priorityIndex = packetDef.priorityIndex
+	const schemaSize = packetDef.schema.size
+	if typeof(schemaSize) == "number" then
+		if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
+			error(`Packet '{packetDef.name}' has type '{packetDef.packetType}' and cannot be sent as an event`)
+		end
+		const packetTotal = Constants.HEADER_SIZE + schemaSize
+		if packetDef.packetType == "Unreliable" then
+			if packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+				error(
+					`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
+				)
+			end
+			const pQueues = getPlayerQueues(playerUnreliable, player)
+			const buf = pQueues[priorityIndex]
+			if buf.size > 0 and buf.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+				const flushed = flushPriorityQueues(pQueues)
+				if flushed ~= nil then
+					Channel.getUnreliableEvent():FireClient(player, flushed)
+				end
+			end
+			writeFixedToBuffer(buf, packetDef, schemaSize, data)
+			if not isUnreliablePlayerDirty[player] then
+				isUnreliablePlayerDirty[player] = true
+				table.insert(activeUnreliablePlayers, player)
+			end
+		else
+			const pQueues = getPlayerQueues(playerReliable, player)
+			const buf = pQueues[priorityIndex]
+			if buf.size > 0 and buf.size + packetTotal > Constants.MAX_PACKET_SIZE then
+				const flushed = flushPriorityQueues(pQueues)
+				if flushed ~= nil then
+					Channel.getReliableEvent():FireClient(player, flushed)
+				end
+			end
+			writeFixedToBuffer(buf, packetDef, schemaSize, data)
+			if not isReliablePlayerDirty[player] then
+				isReliablePlayerDirty[player] = true
+				table.insert(activeReliablePlayers, player)
+			end
+		end
+		return
+	end
+
 	const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
 	enqueuePreSerializedVerified(player, packetDef, scratchRaw, payloadLen)
 end
@@ -306,6 +508,41 @@ function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, 
 	if not isInitialized then
 		OutgoingQueue.init()
 	end
+
+	const priorityIndex = packetDef.priorityIndex
+	const schemaSize = packetDef.schema.size
+	if typeof(schemaSize) == "number" then
+		if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
+			error(`Packet '{packetDef.name}' has type '{packetDef.packetType}' and cannot be sent as an event`)
+		end
+		const packetTotal = Constants.HEADER_SIZE + schemaSize
+		if packetDef.packetType == "Unreliable" then
+			if packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+				error(
+					`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
+				)
+			end
+			const buf = broadcastUnreliable[priorityIndex]
+			if buf.size > 0 and buf.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+				const flushed = flushPriorityQueues(broadcastUnreliable)
+				if flushed ~= nil then
+					Channel.getUnreliableEvent():FireAllClients(flushed)
+				end
+			end
+			writeFixedToBuffer(buf, packetDef, schemaSize, data)
+		else
+			const buf = broadcastReliable[priorityIndex]
+			if buf.size > 0 and buf.size + packetTotal > Constants.MAX_PACKET_SIZE then
+				const flushed = flushPriorityQueues(broadcastReliable)
+				if flushed ~= nil then
+					Channel.getReliableEvent():FireAllClients(flushed)
+				end
+			end
+			writeFixedToBuffer(buf, packetDef, schemaSize, data)
+		end
+		return
+	end
+
 	const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
 	const packetTotal = Constants.HEADER_SIZE + payloadLen
 
@@ -315,19 +552,23 @@ function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, 
 				`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
 			)
 		end
-		if broadcastUnreliable.size > 0 and broadcastUnreliable.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
-			const flushed = ByteBuffer.compact(broadcastUnreliable)
-			ByteBuffer.reset(broadcastUnreliable)
-			Channel.getUnreliableEvent():FireAllClients(flushed)
+		const buf = broadcastUnreliable[priorityIndex]
+		if buf.size > 0 and buf.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+			const flushed = flushPriorityQueues(broadcastUnreliable)
+			if flushed ~= nil then
+				Channel.getUnreliableEvent():FireAllClients(flushed)
+			end
 		end
-		writeSerializedToBuffer(broadcastUnreliable, packetDef.id, scratchRaw, payloadLen)
+		writeSerializedToBuffer(buf, packetDef.id, scratchRaw, payloadLen)
 	else
-		if broadcastReliable.size > 0 and broadcastReliable.size + packetTotal > Constants.MAX_PACKET_SIZE then
-			const flushed = ByteBuffer.compact(broadcastReliable)
-			ByteBuffer.reset(broadcastReliable)
-			Channel.getReliableEvent():FireAllClients(flushed)
+		const buf = broadcastReliable[priorityIndex]
+		if buf.size > 0 and buf.size + packetTotal > Constants.MAX_PACKET_SIZE then
+			const flushed = flushPriorityQueues(broadcastReliable)
+			if flushed ~= nil then
+				Channel.getReliableEvent():FireAllClients(flushed)
+			end
 		end
-		writeSerializedToBuffer(broadcastReliable, packetDef.id, scratchRaw, payloadLen)
+		writeSerializedToBuffer(buf, packetDef.id, scratchRaw, payloadLen)
 	end
 end
 

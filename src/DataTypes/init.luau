@@ -12,8 +12,8 @@ const f32 = require("@datatypes/f32")
 const f48 = require("@datatypes/f48")
 const f64 = require("@datatypes/f64")
 const boolean = require("@datatypes/boolean")
-const stringDesc = require("@datatypes/string")
-const bufferDesc = require("@datatypes/buffer")
+const str = require("@datatypes/string")
+const buff = require("@datatypes/buffer")
 const Vector2 = require("@datatypes/Vector2")
 const Vector3 = require("@datatypes/Vector3")
 const Color3 = require("@datatypes/Color3")
@@ -25,6 +25,9 @@ const Array = require("@datatypes/Array")
 const Map = require("@datatypes/Map")
 const Struct = require("@datatypes/Struct")
 const Optional = require("@datatypes/Optional")
+const Auto = require("@datatypes/Auto")
+const Bitfield = require("@datatypes/Bitfield")
+const VarInt = require("@datatypes/VarInt")
 
 return table.freeze({
 	u8 = u8,
@@ -39,20 +42,25 @@ return table.freeze({
 	f48 = f48,
 	f64 = f64,
 	boolean = boolean,
-	string = stringDesc,
-	buffer = bufferDesc,
+	string = str,
+	buffer = buff,
+	varu32 = VarInt.VarU32,
+	vari32 = VarInt.VarI32,
 
 	Vector2 = Vector2,
 	Vector3 = Vector3,
+	Color2 = color2,
 	Color3 = Color3,
-	color2 = color2,
 	CFrame = CFrame,
 	EnumItem = EnumItem,
 	Instance = Instance,
+
+	Struct = Struct,
 	Array = Array,
 	Map = Map,
-	Struct = Struct,
 	Optional = Optional,
+	Bitfield = Bitfield,
+	Auto = Auto,
 
 	U8 = u8,
 	U16 = u16,
@@ -66,9 +74,18 @@ return table.freeze({
 	F48 = f48,
 	F64 = f64,
 	Boolean = boolean,
-	String = stringDesc,
-	Buffer = bufferDesc,
-	RawBuffer = bufferDesc,
-	Color2 = color2,
+	String = str,
+	Buffer = buff,
+	RawBuffer = buff,
+	VarU32 = VarInt.VarU32,
+	VarI32 = VarInt.VarI32,
+	varint = VarInt.VarU32,
+	VarInt = VarInt,
+	color2 = color2,
+	struct = Struct,
+	array = Array,
 	map = Map,
+	optional = Optional,
+	bitfield = Bitfield,
+	auto = Auto,
 })

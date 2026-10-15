@@ -12,7 +12,7 @@ const OutgoingQueue = require("@network/OutgoingQueue")
 export type Connection = Types.Connection
 
 type ListenerNode = {
-	callback: (any) -> (),
+	callback: (unknown) -> (),
 	connected: boolean,
 	next: ListenerNode?,
 	prev: ListenerNode?,
@@ -23,6 +23,8 @@ const Client = {}
 local listenerHeads: { [number]: ListenerNode? } = {}
 local listenerTails: { [number]: ListenerNode? } = {}
 local isListening = false
+
+const packetsById = Registry.rawById
 
 @native
 const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
@@ -39,10 +41,10 @@ const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
 			break
 		end
 
-		const packetDef = Registry.getById(packetId)
-		if packetDef ~= nil and packetDef.packetType == expectedType then
-			local current = listenerHeads[packetId]
-			if current ~= nil then
+		local current = listenerHeads[packetId]
+		if current ~= nil then
+			const packetDef = packetsById[packetId]
+			if packetDef ~= nil and packetDef.packetType == expectedType then
 				const data, readEndOffset = packetDef.schema.read(rawBuf, payloadStart)
 				if typeof(readEndOffset) == "number" and readEndOffset ~= nextOffset then
 					break
@@ -103,7 +105,7 @@ function Client.on<T>(packetDef: Types.PacketDefinition<T>, listener: (T) -> ())
 
 	const packetId = packetDef.id
 	const node: ListenerNode = {
-		callback = listener,
+		callback = listener :: (unknown) -> (),
 		connected = true,
 		next = nil,
 		prev = listenerTails[packetId],

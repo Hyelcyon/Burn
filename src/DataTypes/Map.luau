@@ -16,34 +16,29 @@ const function Map<K, V>(
 
 	@native
 	const function write(buf: buffer, offset: number, dict: { [K]: V }): number
-		local currentOffset = offset
+		local currentOffset = offset + 2
 		local count = 0
-		for _ in dict do
-			count += 1
-		end
-
-		buffer.writeu16(buf, currentOffset, count)
-		currentOffset += 2
 
 		for k, v in dict do
+			count += 1
 			currentOffset = keyWrite(buf, currentOffset, k)
 			currentOffset = valWrite(buf, currentOffset, v)
 		end
 
+		buffer.writeu16(buf, offset, count)
 		return currentOffset
 	end
 
 	@native
 	const function read(buf: buffer, offset: number): ({ [K]: V }, number)
-		local currentOffset = offset
-		const count = buffer.readu16(buf, currentOffset)
-		currentOffset += 2
+		const count = buffer.readu16(buf, offset)
+		local currentOffset = offset + 2
 
 		const dict: { [K]: V } = {}
+		local k: K
+		local v: V
 		for _ = 1, count do
-			local k: K
 			k, currentOffset = keyRead(buf, currentOffset)
-			local v: V
 			v, currentOffset = valRead(buf, currentOffset)
 			dict[k] = v
 		end
@@ -51,18 +46,29 @@ const function Map<K, V>(
 		return dict, currentOffset
 	end
 
-	@native
-	const function skip(buf: buffer, offset: number): number
-		local currentOffset = offset
-		const count = buffer.readu16(buf, currentOffset)
-		currentOffset += 2
-
-		for _ = 1, count do
-			currentOffset = keySkip(buf, currentOffset)
-			currentOffset = valSkip(buf, currentOffset)
+	local skip: (buf: buffer, offset: number) -> number
+	if keyDescriptor.size ~= nil and valueDescriptor.size ~= nil then
+		const fixedEntrySize = keyDescriptor.size + valueDescriptor.size
+		@native
+		local function skipFixed(buf: buffer, offset: number): number
+			const count = buffer.readu16(buf, offset)
+			return offset + 2 + count * fixedEntrySize
 		end
+		skip = skipFixed
+	else
+		@native
+		local function skipDynamic(buf: buffer, offset: number): number
+			const count = buffer.readu16(buf, offset)
+			local currentOffset = offset + 2
 
-		return currentOffset
+			for _ = 1, count do
+				currentOffset = keySkip(buf, currentOffset)
+				currentOffset = valSkip(buf, currentOffset)
+			end
+
+			return currentOffset
+		end
+		skip = skipDynamic
 	end
 
 	return {

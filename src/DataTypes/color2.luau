@@ -1,8 +1,5 @@
 --!strict
 
-const INV_31 = 1 / 31
-const INV_63 = 1 / 63
-
 @native
 const function write(buf: buffer, offset: number, value: Color3): number
 	const r = math.round(value.R * 31)
@@ -16,9 +13,9 @@ end
 @native
 const function read(buf: buffer, offset: number): (Color3, number)
 	const packed = buffer.readu16(buf, offset)
-	const r = bit32.rshift(packed, 11) * INV_31
-	const g = bit32.band(bit32.rshift(packed, 5), 0x3F) * INV_63
-	const b = bit32.band(packed, 0x1F) * INV_31
+	const r = bit32.rshift(packed, 11) * (1 / 31)
+	const g = bit32.band(bit32.rshift(packed, 5), 0x3F) * (1 / 63)
+	const b = bit32.band(packed, 0x1F) * (1 / 31)
 	return Color3.new(r, g, b), offset + 2
 end
 

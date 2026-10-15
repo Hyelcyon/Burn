@@ -13,7 +13,7 @@ const OutgoingQueue = require("@network/OutgoingQueue")
 export type Connection = Types.Connection
 
 type ListenerNode = {
-	callback: (Player, any) -> (),
+	callback: (Player, unknown) -> (),
 	connected: boolean,
 	next: ListenerNode?,
 	prev: ListenerNode?,
@@ -28,9 +28,12 @@ const Server = {}
 
 local listenerHeads: { [number]: ListenerNode? } = {}
 local listenerTails: { [number]: ListenerNode? } = {}
-local requestHandlersByPacketId: { [number]: (player: Player, reqData: any) -> (any, Types.TypeDescriptor<any>) } = {}
+local requestHandlersByPacketId: {
+	[number]: (player: Player, reqData: unknown) -> (unknown, Types.AnyTypeDescriptor),
+} =
+	{}
 local playerRateLimits: { [Player]: RateLimit? } = {}
-local removingPlayers: { [Player]: boolean? } = (setmetatable({}, { __mode = "k" }) :: any) :: { [Player]: boolean? }
+local removingPlayers = setmetatable({} :: { [Player]: boolean? }, { __mode = "k" })
 local isListening = false
 
 const function isPlayerActive(player: Player): boolean
@@ -68,6 +71,8 @@ const function checkRateLimit(player: Player, size: number): boolean
 	return false
 end
 
+const packetsById = Registry.rawById
+
 @native
 const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, expectedType: Types.PacketType)
 	local offset = 0
@@ -88,15 +93,15 @@ const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, e
 			break
 		end
 
-		const packetDef = Registry.getById(packetId)
-		if packetDef ~= nil and packetDef.packetType == expectedType then
-			const fixedSize = packetDef.schema.size
-			if typeof(fixedSize) == "number" and payloadLen ~= fixedSize then
-				break
-			end
+		local current = listenerHeads[packetId]
+		if current ~= nil then
+			const packetDef = packetsById[packetId]
+			if packetDef ~= nil and packetDef.packetType == expectedType then
+				const fixedSize = packetDef.schema.size
+				if typeof(fixedSize) == "number" and payloadLen ~= fixedSize then
+					break
+				end
 
-			local current = listenerHeads[packetId]
-			if current ~= nil then
 				const data, readEndOffset = packetDef.schema.read(rawBuf, payloadStart)
 				if typeof(readEndOffset) == "number" and readEndOffset ~= nextOffset then
 					break
@@ -126,7 +131,7 @@ const function decodeAndDispatch(player: Player, rawBuf: buffer, expectedType: T
 		return
 	end
 
-	const ok, err: any = pcall(decodeBatchFast :: any, player, rawBuf, bufLen, expectedType)
+	const ok: boolean, err: unknown? = pcall(decodeBatchFast, player, rawBuf, bufLen, expectedType)
 	if not ok then
 		warn(`[Burn] Dropped malformed packet batch from {player.Name}: {err}`)
 	end
@@ -171,7 +176,7 @@ const function ensureListening()
 		end
 	end)
 
-	Channel.getRequestFunction().OnServerInvoke = function(player: Player, reqBuf: any): buffer?
+	Channel.getRequestFunction().OnServerInvoke = function(player: Player, reqBuf: unknown): buffer?
 		if not isPlayerActive(player) then
 			return nil
 		end
@@ -233,7 +238,8 @@ const function ensureListening()
 		const capacity = if typeof(resSize) == "number" then resSize else Constants.MAX_PACKET_SIZE
 		ByteBuffer.ensureCapacity(scratch, capacity)
 
-		const writeOk, resLenOrErr = pcall(resSchema.write, scratch.raw, 0, resData)
+		const writeFn = resSchema.write :: (buf: buffer, offset: number, value: unknown) -> number
+		const writeOk, resLenOrErr = pcall(writeFn, scratch.raw, 0, resData)
 		if not writeOk then
 			return nil
 		end
@@ -290,7 +296,7 @@ function Server.on<T>(packetDef: Types.PacketDefinition<T>, listener: (Player, T
 
 	const packetId = packetDef.id
 	const node: ListenerNode = {
-		callback = listener,
+		callback = listener :: (Player, unknown) -> (),
 		connected = true,
 		next = nil,
 		prev = listenerTails[packetId],
@@ -338,8 +344,8 @@ function Server.handleRequest<Req, Res>(
 		error(`Server.handleRequest requires a packet with packetType == 'Request' (got '{packetDef.packetType}')`)
 	end
 	ensureListening()
-	requestHandlersByPacketId[packetDef.id] = function(player: Player, reqData: any)
-		const resData = handler(player, reqData)
+	requestHandlersByPacketId[packetDef.id] = function(player: Player, reqData: unknown)
+		const resData = handler(player, reqData :: Req)
 		return resData, responseSchema
 	end
 end

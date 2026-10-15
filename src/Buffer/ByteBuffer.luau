@@ -22,18 +22,20 @@ end
 
 @native
 function ByteBuffer.ensureCapacity(self: ByteBuffer, required: number)
-	if required <= self.capacity then
+	const currentCapacity = self.capacity
+	if required <= currentCapacity then
 		return
 	end
 
-	local newCapacity = self.capacity * 2
+	local newCapacity = currentCapacity * 2
 	if newCapacity < required then
 		newCapacity = required
 	end
 
 	const newRaw = buffer.create(newCapacity)
-	if self.size > 0 then
-		buffer.copy(newRaw, 0, self.raw, 0, self.size)
+	const currentSize = self.size
+	if currentSize > 0 then
+		buffer.copy(newRaw, 0, self.raw, 0, currentSize)
 	end
 
 	self.raw = newRaw
@@ -47,9 +49,10 @@ end
 
 @native
 function ByteBuffer.compact(self: ByteBuffer): buffer
-	const exact = buffer.create(self.size)
-	if self.size > 0 then
-		buffer.copy(exact, 0, self.raw, 0, self.size)
+	const currentSize = self.size
+	const exact = buffer.create(currentSize)
+	if currentSize > 0 then
+		buffer.copy(exact, 0, self.raw, 0, currentSize)
 	end
 	return exact
 end
@@ -60,6 +63,11 @@ const scratchBuffer: ByteBuffer = ByteBuffer.create(Constants.MAX_PACKET_SIZE)
 function ByteBuffer.getScratch(): ByteBuffer
 	scratchBuffer.size = 0
 	return scratchBuffer
+end
+
+@native
+function ByteBuffer.getScratchRaw(): buffer
+	return scratchBuffer.raw
 end
 
 return ByteBuffer

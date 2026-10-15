@@ -4,19 +4,36 @@ const Constants = require("@src/Constants")
 const Types = require("@src/Types")
 const Definition = require("@packet/Definition")
 
+export type PacketOptions = Types.PacketOptions
+
 const Registry = {}
 
-local packetsById: { [number]: Types.PacketDefinition<any> } = {}
-local packetsByName: { [string]: Types.PacketDefinition<any> } = {}
+local packetsById: { [number]: Types.ErasedPacketDefinition } = {}
+local packetsByName: { [string]: Types.ErasedPacketDefinition } = {}
 local nextAutoId = 1
+
+Registry.rawById = packetsById
 
 function Registry.register<T>(
 	name: string,
 	packetType: Types.PacketType,
 	schema: Types.TypeDescriptor<T>,
-	explicitId: number?
+	optionsOrId: (number | PacketOptions)?,
+	maybePriority: Types.PacketPriority?
 ): Types.PacketDefinition<T>
 	assert(packetsByName[name] == nil, `Packet '{name}' is already registered`)
+
+	local explicitId: number?
+	local priority: Types.PacketPriority? = maybePriority
+
+	if typeof(optionsOrId) == "table" then
+		explicitId = optionsOrId.id
+		if optionsOrId.priority ~= nil then
+			priority = optionsOrId.priority
+		end
+	elseif typeof(optionsOrId) == "number" then
+		explicitId = optionsOrId
+	end
 
 	local id: number
 	if explicitId == nil then
@@ -43,18 +60,18 @@ function Registry.register<T>(
 		id = explicitId
 	end
 
-	const def = Definition(id, name, packetType, schema)
+	const def = Definition(id, name, packetType, schema, priority)
 	packetsById[id] = def
 	packetsByName[name] = def
 
 	return def
 end
 
-function Registry.getById(id: number): Types.PacketDefinition<any>?
+function Registry.getById(id: number): Types.ErasedPacketDefinition?
 	return packetsById[id]
 end
 
-function Registry.getByName(name: string): Types.PacketDefinition<any>?
+function Registry.getByName(name: string): Types.ErasedPacketDefinition?
 	return packetsByName[name]
 end
 

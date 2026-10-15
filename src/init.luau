@@ -11,6 +11,8 @@ const Network = require("@network")
 
 export type TypeDescriptor<T> = Types.TypeDescriptor<T>
 export type PacketType = Types.PacketType
+export type PacketPriority = Types.PacketPriority
+export type PacketOptions = Types.PacketOptions
 export type PacketDefinition<T> = Types.PacketDefinition<T>
 export type Connection = Types.Connection
 export type ByteBuffer = Buffer.ByteBuffer
@@ -19,84 +21,130 @@ export type Cursor = Buffer.Cursor
 const isServer = RunService:IsServer()
 const isClient = RunService:IsClient()
 
-const function on(packet: any, listener: any)
+export type ServerListener<T> = (Player, T) -> ()
+export type ClientListener<T> = (T) -> ()
+export type Listener<T> = ServerListener<T> | ClientListener<T>
+
+const function on<T>(packet: Types.PacketDefinition<T>, listener: Listener<T>): Types.Connection
 	if isServer then
-		return Network.Server.on(packet, listener)
+		return Network.Server.on(packet, listener :: ServerListener<T>)
 	else
-		return Network.Client.on(packet, listener)
+		return Network.Client.on(packet, listener :: ClientListener<T>)
 	end
 end
 
-const function once(packet, listener)
-	local conn: Types.Connection
-	conn = on(packet, function(...)
-		conn:disconnect()
-		listener(...)
-	end)
-	return conn
+const function once<T>(packet: Types.PacketDefinition<T>, listener: Listener<T>): Types.Connection
+	if isServer then
+		const serverListener = listener :: ServerListener<T>
+		local conn: Types.Connection
+		conn = Network.Server.on(packet, function(player: Player, data: T)
+			conn:disconnect()
+			serverListener(player, data)
+		end)
+		return conn
+	else
+		const clientListener = listener :: ClientListener<T>
+		local conn: Types.Connection
+		conn = Network.Client.on(packet, function(data: T)
+			conn:disconnect()
+			clientListener(data)
+		end)
+		return conn
+	end
 end
 
-const function wait(packet)
+const function wait<T>(packet: Types.PacketDefinition<T>)
 	const thread = coroutine.running()
-	local conn: Types.Connection
-	conn = on(packet, function(...)
-		conn:disconnect()
-		task.spawn(thread, ...)
-	end)
-	return coroutine.yield()
-end
-
-const function send(target: any, packetOrData: any, maybeData: any?)
 	if isServer then
-		if maybeData ~= nil then
-			Network.Server.send(target, packetOrData, maybeData)
-		else
-			Network.Server.broadcast(target, packetOrData)
-		end
+		local conn: Types.Connection
+		conn = Network.Server.on(packet, function(player: Player, data: T)
+			conn:disconnect()
+			task.spawn(thread, player, data)
+		end)
+		return coroutine.yield()
 	else
-		Network.Client.send(target, packetOrData)
+		local conn: Types.Connection
+		conn = Network.Client.on(packet, function(data: T)
+			conn:disconnect()
+			task.spawn(thread, data)
+		end)
+		return coroutine.yield()
 	end
 end
 
-const function sendImmediate(target: any, packetOrData: any, maybeData: any?)
+const function send<T>(
+	target: Player | { Player } | Types.PacketDefinition<T>,
+	packetOrData: Types.PacketDefinition<T> | T,
+	maybeData: T?
+)
 	if isServer then
 		if maybeData ~= nil then
-			Network.Server.sendImmediate(target, packetOrData, maybeData)
+			Network.Server.send(target :: Player | { Player }, packetOrData :: Types.PacketDefinition<T>, maybeData)
 		else
-			Network.Server.broadcastImmediate(target, packetOrData)
+			Network.Server.broadcast(target :: Types.PacketDefinition<T>, packetOrData :: T)
 		end
 	else
-		Network.Client.sendImmediate(target, packetOrData)
+		Network.Client.send(target :: Types.PacketDefinition<T>, packetOrData :: T)
 	end
 end
 
-const function broadcast(packet, data)
+const function sendImmediate<T>(
+	target: Player | { Player } | Types.PacketDefinition<T>,
+	packetOrData: Types.PacketDefinition<T> | T,
+	maybeData: T?
+)
+	if isServer then
+		if maybeData ~= nil then
+			Network.Server.sendImmediate(
+				target :: Player | { Player },
+				packetOrData :: Types.PacketDefinition<T>,
+				maybeData
+			)
+		else
+			Network.Server.broadcastImmediate(target :: Types.PacketDefinition<T>, packetOrData :: T)
+		end
+	else
+		Network.Client.sendImmediate(target :: Types.PacketDefinition<T>, packetOrData :: T)
+	end
+end
+
+const function broadcast<T>(packet: Types.PacketDefinition<T>, data: T)
 	assert(isServer, "Burn.broadcast can only be called on the server")
 	Network.Server.broadcast(packet, data)
 end
 
-const function broadcastExcept(excludedPlayer, packet, data)
+const function broadcastExcept<T>(excludedPlayer: Player, packet: Types.PacketDefinition<T>, data: T)
 	assert(isServer, "Burn.broadcastExcept can only be called on the server")
 	Network.Server.broadcastExcept(excludedPlayer, packet, data)
 end
 
-const function broadcastImmediate(packet, data)
+const function broadcastImmediate<T>(packet: Types.PacketDefinition<T>, data: T)
 	assert(isServer, "Burn.broadcastImmediate can only be called on the server")
 	Network.Server.broadcastImmediate(packet, data)
 end
 
-const function invoke(packet, responseSchema, data)
+const function invoke<Req, Res>(packet: Types.PacketDefinition<Req>, responseSchema: Types.TypeDescriptor<Res>, data: Req): Res?
 	assert(isClient, "Burn.invoke can only be called on the client")
 	return Network.Client.invoke(packet, responseSchema, data)
 end
 
-const function handleRequest(packet, responseSchema, handler)
+const function handleRequest<Req, Res>(
+	packet: Types.PacketDefinition<Req>,
+	responseSchema: Types.TypeDescriptor<Res>,
+	handler: (Player, Req) -> Res
+)
 	assert(isServer, "Burn.handleRequest can only be called on the server")
 	Network.Server.handleRequest(packet, responseSchema, handler)
 end
 
-const function definePacket(name, packetType, schema, explicitId)
-	return Packet.Registry.register(name, packetType, schema, explicitId)
+const function definePacket<T>(
+	name: string,
+	packetType: Types.PacketType,
+	schema: Types.TypeDescriptor<T>,
+	optionsOrId: (number | PacketOptions)?,
+	maybePriority: Types.PacketPriority?
+): Types.PacketDefinition<T>
+	return Packet.Registry.register(name, packetType, schema, optionsOrId, maybePriority)
 end
 
 const Burn = table.freeze({

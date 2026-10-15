@@ -7,35 +7,46 @@ const function Optional<T>(descriptor: Types.TypeDescriptor<T>): Types.TypeDescr
 	const innerRead = descriptor.read
 	const innerSkip = descriptor.skip
 
+	const innerSize = descriptor.size
+
 	@native
 	const function write(buf: buffer, offset: number, value: T?): number
 		if value == nil then
 			buffer.writeu8(buf, offset, 0)
 			return offset + 1
-		else
-			buffer.writeu8(buf, offset, 1)
-			return innerWrite(buf, offset + 1, value)
 		end
+		buffer.writeu8(buf, offset, 1)
+		return innerWrite(buf, offset + 1, value)
 	end
 
 	@native
 	const function read(buf: buffer, offset: number): (T?, number)
-		const hasValue = buffer.readu8(buf, offset) ~= 0
-		if hasValue then
+		if buffer.readu8(buf, offset) ~= 0 then
 			return innerRead(buf, offset + 1)
-		else
-			return nil, offset + 1
 		end
+		return nil, offset + 1
 	end
 
-	@native
-	const function skip(buf: buffer, offset: number): number
-		const hasValue = buffer.readu8(buf, offset) ~= 0
-		if hasValue then
-			return innerSkip(buf, offset + 1)
-		else
+	local skip: (buf: buffer, offset: number) -> number
+	if innerSize ~= nil then
+		const fixedSize = innerSize
+		@native
+		local function skipFixed(buf: buffer, offset: number): number
+			if buffer.readu8(buf, offset) ~= 0 then
+				return offset + 1 + fixedSize
+			end
 			return offset + 1
 		end
+		skip = skipFixed
+	else
+		@native
+		local function skipDynamic(buf: buffer, offset: number): number
+			if buffer.readu8(buf, offset) ~= 0 then
+				return innerSkip(buf, offset + 1)
+			end
+			return offset + 1
+		end
+		skip = skipDynamic
 	end
 
 	return {

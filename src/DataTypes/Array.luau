@@ -23,13 +23,12 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeD
 
 	@native
 	const function read(buf: buffer, offset: number): ({ T }, number)
-		local currentOffset = offset
-		const count = buffer.readu16(buf, currentOffset)
-		currentOffset += 2
+		const count = buffer.readu16(buf, offset)
+		local currentOffset = offset + 2
 
 		const list: { T } = table.create(count)
+		local item: T
 		for index = 1, count do
-			local item: T
 			item, currentOffset = elemRead(buf, currentOffset)
 			list[index] = item
 		end
@@ -37,17 +36,28 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeD
 		return list, currentOffset
 	end
 
-	@native
-	const function skip(buf: buffer, offset: number): number
-		local currentOffset = offset
-		const count = buffer.readu16(buf, currentOffset)
-		currentOffset += 2
-
-		for _ = 1, count do
-			currentOffset = elemSkip(buf, currentOffset)
+	local skip: (buf: buffer, offset: number) -> number
+	const elemSize = elementDescriptor.size
+	if elemSize ~= nil then
+		@native
+		local function skipFixed(buf: buffer, offset: number): number
+			const count = buffer.readu16(buf, offset)
+			return offset + 2 + count * elemSize
 		end
+		skip = skipFixed
+	else
+		@native
+		local function skipDynamic(buf: buffer, offset: number): number
+			const count = buffer.readu16(buf, offset)
+			local currentOffset = offset + 2
 
-		return currentOffset
+			for _ = 1, count do
+				currentOffset = elemSkip(buf, currentOffset)
+			end
+
+			return currentOffset
+		end
+		skip = skipDynamic
 	end
 
 	return {
