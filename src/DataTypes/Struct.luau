@@ -28,6 +28,30 @@ type FieldEntry = {
 	desc: Types.AnyTypeDescriptor,
 }
 
+--[=[
+	@function Struct
+	@within DataTypes
+	@param fields { [string]: TypeDescriptor<any> } -- Map of field names to type descriptors
+	@return TypeDescriptor<T>
+
+	Compiles a static binary struct schema with deterministic alphabetical field ordering.
+
+	```lua
+	local PlayerData = Burn.Types.Struct({
+		name = Burn.Types.string,
+		level = Burn.Types.varu32,
+		position = Burn.Types.Vector3,
+		flags = Burn.Types.Bitfield({ "alive", "crouching" }),
+	})
+	```
+
+	:::note
+	Fields are automatically sorted alphabetically at construction to guarantee wire-format
+	stability regardless of Luau hash table iteration order.
+	Features unrolled fast-paths for 1 through 6 fields, and pre-allocated cloned table templates
+	for zero hash-resizing decoding.
+	:::
+]=]
 const function Struct<F>(fields: F & { read [string]: Types.AnyTypeDescriptor }): Types.TypeDescriptor<InferStructType<F>>
 	type T = InferStructType<F>
 

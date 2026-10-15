@@ -20,6 +20,34 @@ end
 
 export type BitfieldDescriptor<F> = Types.TypeDescriptor<InferBitfieldType<F>>
 
+--[=[
+	@function Bitfield
+	@within DataTypes
+	@param flagList { string } -- Array of flag names (between 1 and 32 flags)
+	@return TypeDescriptor<{ [string]: boolean }>
+
+	Creates a compact bit-packed boolean descriptor that compresses up to 32 boolean flags
+	into 1, 2, 3, or 4 bytes.
+
+	- 1 ~ 8 flags: **1 byte** (`writeu8`) - 87.5% bandwidth savings over individual booleans
+	- 9 ~ 16 flags: **2 bytes** (`writeu16`)
+	- 17 ~ 24 flags: **3 bytes**
+	- 25 ~ 32 flags: **4 bytes** (`writeu32`)
+
+	```lua
+	local PlayerFlags = Burn.Types.Bitfield({
+		"isAlive",
+		"isGrounded",
+		"isSprinting",
+		"isCrouching",
+	})
+	```
+
+	:::note
+	Uses Luau New Type Solver `type function` to synthesize exact compile-time
+	static table types. Unrolled table constructors eliminate hash-table rehashes during decoding.
+	:::
+]=]
 const function Bitfield<F>(flagList: F & { [number]: string }): BitfieldDescriptor<F>
 	type T = InferBitfieldType<F>
 

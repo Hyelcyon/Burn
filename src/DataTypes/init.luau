@@ -29,6 +29,17 @@ const Auto = require("@datatypes/Auto")
 const Bitfield = require("@datatypes/Bitfield")
 const VarInt = require("@datatypes/VarInt")
 
+--[=[
+	@class DataTypes
+	Catalogue of binary serialization schemas and builder descriptors.
+
+	### Hybrid Convention:
+	- **Primitives (lowercase)**: `u8`, `u16`, `u32`, `i8`, `i32`, `f32`, `boolean`, `string`, `buffer`, `varu32`, `vari32`
+	- **Roblox Engine Types (PascalCase)**: `Vector2`, `Vector3`, `Color2`, `Color3`, `CFrame`, `EnumItem`, `Instance`
+	- **Composite Builders (PascalCase)**: `Struct`, `Array`, `Map`, `Optional`, `Bitfield`, `Auto`
+
+	Convenience aliases (PascalCase primitives and lowercase builders) are fully provided.
+]=]
 return table.freeze({
 	u8 = u8,
 	u16 = u16,

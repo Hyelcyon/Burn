@@ -264,6 +264,29 @@ const function skip(buf: buffer, offset: number): number
 	error(`[Burn] Corrupted packet: Unknown Auto tag type '{tagType}' at offset {offset}`)
 end
 
+--[=[
+	@prop Auto TypeDescriptor<unknown>
+	@within DataTypes
+
+	Dynamic, self-describing serializer supporting arbitrary mixed Luau values without prior schema declaration.
+
+	Uses 1-byte nibble bit-packing for maximum byte efficiency:
+	- **High 4 bits (Type Tag)**: 16 distinct type discriminators (nil, bool, ints, floats, string, buffer, Vector3, CFrame, Color3, array, map).
+	- **Low 4 bits (Inline Payload)**:
+	  - Booleans encode value directly in tag (**1 byte** total).
+	  - Integers 0..15 encode value inline (**1 byte** total).
+	  - Strings <= 14 bytes encode length inline, eliminating the 2-byte length header.
+	  - Arrays <= 14 elements encode count inline, eliminating the 2-byte count header.
+
+	```lua
+	local DynamicPacket = Burn.definePacket("DynamicEvent", "Reliable", Burn.Types.Auto)
+	```
+
+	:::note
+	For known, fixed data structures, prefer static schemas (`Struct`, `Vector3`, `VarU32`) for maximum performance.
+	Use `Auto` when transmission payloads vary dynamically across invocations.
+	:::
+]=]
 const Auto: Types.TypeDescriptor<unknown> = table.freeze({
 	size = nil,
 	write = write,
