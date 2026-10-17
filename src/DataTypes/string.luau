@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	UTF-8 string TypeDescriptor prefixed with a 2-byte (u16) length (max 65,535 bytes).
@@ -25,9 +27,11 @@ const function skip(buf: buffer, offset: number): number
 	return offset + 2 + len
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<string> = table.freeze({
 	size = nil,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor

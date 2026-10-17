@@ -97,4 +97,30 @@ export type NetworkContext = {
 	instances: { Instance }?,
 }
 
+type function InferType(D: type)
+	if not D:is("table") then
+		return types.unknown
+	end
+
+	local target = D
+	const schemaProp = D:readproperty(types.singleton("schema"))
+	if schemaProp and schemaProp:is("table") then
+		target = schemaProp
+	end
+
+	const readProp = target:readproperty(types.singleton("read"))
+	if readProp and readProp:is("function") then
+		const rets = readProp:returns().head
+		if rets and #rets > 0 then
+			return rets[1]
+		end
+	end
+
+	return types.unknown
+end
+
+export type Infer<D> = InferType<D>
+export type TypeOf<D> = InferType<D>
+export type InferPacket<P> = InferType<P>
+
 return nil

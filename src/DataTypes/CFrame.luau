@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	28-byte compact CFrame representation:
@@ -73,9 +75,11 @@ const function skip(_buf: buffer, offset: number): number
 	return offset + 28
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<CFrame> = table.freeze({
 	size = 28,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor

@@ -145,7 +145,9 @@ const function writeFixedToBuffer<T>(
 
 	buffer.writeu8(target.raw, targetOffset, packetDef.id)
 	buffer.writeu16(target.raw, targetOffset + 1, schemaSize)
-	const writtenLen = packetDef.schema.write(target.raw, targetOffset + Constants.HEADER_SIZE, data)
+	const payloadStart = targetOffset + Constants.HEADER_SIZE
+	const nextOffset = packetDef.schema.write(target.raw, payloadStart, data)
+	const writtenLen = nextOffset - payloadStart
 	if writtenLen ~= schemaSize then
 		error(`Packet '{packetDef.name}' wrote {writtenLen} bytes, expected fixed size {schemaSize}`)
 	end
@@ -197,7 +199,9 @@ const function buildImmediateBuffer<T>(packetDef: Types.PacketDefinition<T>, dat
 		const out = buffer.create(packetTotal)
 		buffer.writeu8(out, 0, packetDef.id)
 		buffer.writeu16(out, 1, schemaSize)
-		const writtenLen = packetDef.schema.write(out, Constants.HEADER_SIZE, data)
+		const payloadStart = Constants.HEADER_SIZE
+		const nextOffset = packetDef.schema.write(out, payloadStart, data)
+		const writtenLen = nextOffset - payloadStart
 		if writtenLen ~= schemaSize then
 			error(`Packet '{packetDef.name}' wrote {writtenLen} bytes, expected fixed size {schemaSize}`)
 		end

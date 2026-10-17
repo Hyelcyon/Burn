@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	Raw binary buffer TypeDescriptor prefixed with a 4-byte (u32) byte length.
@@ -26,9 +28,11 @@ const function skip(buf: buffer, offset: number): number
 	return offset + 4 + len
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<buffer> = table.freeze({
 	size = nil,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor

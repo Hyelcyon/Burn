@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	12-byte Vector3 TypeDescriptor (3x f32 components: X, Y, Z).
@@ -25,9 +27,11 @@ const function skip(_buf: buffer, offset: number): number
 	return offset + 12
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<Vector3> = table.freeze({
 	size = 12,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor

@@ -10,13 +10,23 @@ const Packet = require("@packet")
 const Network = require("@network")
 
 export type TypeDescriptor<T> = Types.TypeDescriptor<T>
+export type AnyTypeDescriptor = Types.AnyTypeDescriptor
+export type ErasedTypeDescriptor = Types.ErasedTypeDescriptor
 export type PacketType = Types.PacketType
 export type PacketPriority = Types.PacketPriority
 export type PacketOptions = Types.PacketOptions
 export type PacketDefinition<T> = Types.PacketDefinition<T>
+export type AnyPacketDefinition = Types.AnyPacketDefinition
+export type ErasedPacketDefinition = Types.ErasedPacketDefinition
 export type Connection = Types.Connection
+export type NetworkContext = Types.NetworkContext
 export type ByteBuffer = Buffer.ByteBuffer
 export type Cursor = Buffer.Cursor
+export type BitfieldDescriptor<F> = DataTypes.BitfieldDescriptor<F>
+export type DataTypes = DataTypes.DataTypes
+export type Infer<D> = Types.Infer<D>
+export type TypeOf<D> = Types.TypeOf<D>
+export type InferPacket<P> = Types.InferPacket<P>
 
 --[=[
 	@class Burn
@@ -197,10 +207,71 @@ end
 const Burn = table.freeze({
 	Types = DataTypes,
 
+	u8 = DataTypes.u8 :: Types.TypeDescriptor<number>,
+	u16 = DataTypes.u16 :: Types.TypeDescriptor<number>,
+	u24 = DataTypes.u24 :: Types.TypeDescriptor<number>,
+	u32 = DataTypes.u32 :: Types.TypeDescriptor<number>,
+	i8 = DataTypes.i8 :: Types.TypeDescriptor<number>,
+	i16 = DataTypes.i16 :: Types.TypeDescriptor<number>,
+	i24 = DataTypes.i24 :: Types.TypeDescriptor<number>,
+	i32 = DataTypes.i32 :: Types.TypeDescriptor<number>,
+	f32 = DataTypes.f32 :: Types.TypeDescriptor<number>,
+	f48 = DataTypes.f48 :: Types.TypeDescriptor<number>,
+	f64 = DataTypes.f64 :: Types.TypeDescriptor<number>,
+	boolean = DataTypes.boolean :: Types.TypeDescriptor<boolean>,
+	string = DataTypes.string :: Types.TypeDescriptor<string>,
+	buffer = DataTypes.buffer :: Types.TypeDescriptor<buffer>,
+	varu32 = DataTypes.varu32 :: Types.TypeDescriptor<number>,
+	vari32 = DataTypes.vari32 :: Types.TypeDescriptor<number>,
+
+	Vector2 = DataTypes.Vector2 :: Types.TypeDescriptor<Vector2>,
+	Vector3 = DataTypes.Vector3 :: Types.TypeDescriptor<Vector3>,
+	Color2 = DataTypes.Color2 :: Types.TypeDescriptor<Color3>,
+	Color3 = DataTypes.Color3 :: Types.TypeDescriptor<Color3>,
+	CFrame = DataTypes.CFrame :: Types.TypeDescriptor<CFrame>,
+	EnumItem = DataTypes.EnumItem,
+	Instance = DataTypes.Instance :: Types.TypeDescriptor<Instance?>,
+
+	Struct = DataTypes.Struct,
+	Array = DataTypes.Array,
+	Map = DataTypes.Map,
+	Optional = DataTypes.Optional,
+	Bitfield = DataTypes.Bitfield,
+	Auto = DataTypes.Auto,
+
+	U8 = DataTypes.U8 :: Types.TypeDescriptor<number>,
+	U16 = DataTypes.U16 :: Types.TypeDescriptor<number>,
+	U24 = DataTypes.U24 :: Types.TypeDescriptor<number>,
+	U32 = DataTypes.U32 :: Types.TypeDescriptor<number>,
+	I8 = DataTypes.I8 :: Types.TypeDescriptor<number>,
+	I16 = DataTypes.I16 :: Types.TypeDescriptor<number>,
+	I24 = DataTypes.I24 :: Types.TypeDescriptor<number>,
+	I32 = DataTypes.I32 :: Types.TypeDescriptor<number>,
+	F32 = DataTypes.F32 :: Types.TypeDescriptor<number>,
+	F48 = DataTypes.F48 :: Types.TypeDescriptor<number>,
+	F64 = DataTypes.F64 :: Types.TypeDescriptor<number>,
+	Boolean = DataTypes.Boolean :: Types.TypeDescriptor<boolean>,
+	String = DataTypes.String :: Types.TypeDescriptor<string>,
+	Buffer = Buffer.ByteBuffer,
+	RawBuffer = DataTypes.RawBuffer :: Types.TypeDescriptor<buffer>,
+	VarU32 = DataTypes.VarU32 :: Types.TypeDescriptor<number>,
+	VarI32 = DataTypes.VarI32 :: Types.TypeDescriptor<number>,
+	varint = DataTypes.varint :: Types.TypeDescriptor<number>,
+	VarInt = DataTypes.VarInt,
+	color2 = DataTypes.color2 :: Types.TypeDescriptor<Color3>,
+	struct = DataTypes.struct,
+	array = DataTypes.array,
+	map = DataTypes.map,
+	optional = DataTypes.optional,
+	bitfield = DataTypes.bitfield,
+	auto = DataTypes.auto,
+
+	-- Packet API
 	definePacket = definePacket,
 	getPacketById = Packet.Registry.getById,
 	getPacketByName = Packet.Registry.getByName,
 
+	-- Networking API
 	on = on,
 	once = once,
 	wait = wait,
@@ -212,16 +283,14 @@ const Burn = table.freeze({
 	invoke = invoke,
 	handleRequest = handleRequest,
 
-	Buffer = Buffer.ByteBuffer,
 	Cursor = Buffer.Cursor,
-
 	Server = Network.Server,
 	Client = Network.Client,
-
 	isServer = isServer,
 	isClient = isClient,
-
 	Constants = Constants,
 })
+
+export type Burn = typeof(Burn)
 
 return Burn

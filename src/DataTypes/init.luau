@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 const u8 = require("@datatypes/u8")
 const u16 = require("@datatypes/u16")
 const u24 = require("@datatypes/u24")
@@ -29,37 +31,39 @@ const Auto = require("@datatypes/Auto")
 const Bitfield = require("@datatypes/Bitfield")
 const VarInt = require("@datatypes/VarInt")
 
+export type BitfieldDescriptor<F> = Bitfield.BitfieldDescriptor<F>
+
 --[=[
 	@class DataTypes
 	@within Burn
 	Registry of primitive types, Roblox engine types, composite structures, and collections
 	for binary serialization and deserialization.
 ]=]
-return table.freeze({
-	u8 = u8,
-	u16 = u16,
-	u24 = u24,
-	u32 = u32,
-	i8 = i8,
-	i16 = i16,
-	i24 = i24,
-	i32 = i32,
-	f32 = f32,
-	f48 = f48,
-	f64 = f64,
-	boolean = boolean,
-	string = str,
-	buffer = buff,
-	varu32 = VarInt.VarU32,
-	vari32 = VarInt.VarI32,
+const DataTypes = table.freeze({
+	u8 = u8 :: Types.TypeDescriptor<number>,
+	u16 = u16 :: Types.TypeDescriptor<number>,
+	u24 = u24 :: Types.TypeDescriptor<number>,
+	u32 = u32 :: Types.TypeDescriptor<number>,
+	i8 = i8 :: Types.TypeDescriptor<number>,
+	i16 = i16 :: Types.TypeDescriptor<number>,
+	i24 = i24 :: Types.TypeDescriptor<number>,
+	i32 = i32 :: Types.TypeDescriptor<number>,
+	f32 = f32 :: Types.TypeDescriptor<number>,
+	f48 = f48 :: Types.TypeDescriptor<number>,
+	f64 = f64 :: Types.TypeDescriptor<number>,
+	boolean = boolean :: Types.TypeDescriptor<boolean>,
+	string = str :: Types.TypeDescriptor<string>,
+	buffer = buff :: Types.TypeDescriptor<buffer>,
+	varu32 = VarInt.VarU32 :: Types.TypeDescriptor<number>,
+	vari32 = VarInt.VarI32 :: Types.TypeDescriptor<number>,
 
-	Vector2 = Vector2,
-	Vector3 = Vector3,
-	Color2 = color2,
-	Color3 = Color3,
-	CFrame = CFrame,
+	Vector2 = Vector2 :: Types.TypeDescriptor<Vector2>,
+	Vector3 = Vector3 :: Types.TypeDescriptor<Vector3>,
+	Color2 = color2 :: Types.TypeDescriptor<Color3>,
+	Color3 = Color3 :: Types.TypeDescriptor<Color3>,
+	CFrame = CFrame :: Types.TypeDescriptor<CFrame>,
 	EnumItem = EnumItem,
-	Instance = Instance,
+	Instance = Instance :: Types.TypeDescriptor<Instance?>,
 
 	Struct = Struct,
 	Array = Array,
@@ -68,26 +72,26 @@ return table.freeze({
 	Bitfield = Bitfield,
 	Auto = Auto,
 
-	U8 = u8,
-	U16 = u16,
-	U24 = u24,
-	U32 = u32,
-	I8 = i8,
-	I16 = i16,
-	I24 = i24,
-	I32 = i32,
-	F32 = f32,
-	F48 = f48,
-	F64 = f64,
-	Boolean = boolean,
-	String = str,
-	Buffer = buff,
-	RawBuffer = buff,
-	VarU32 = VarInt.VarU32,
-	VarI32 = VarInt.VarI32,
-	varint = VarInt.VarU32,
+	U8 = u8 :: Types.TypeDescriptor<number>,
+	U16 = u16 :: Types.TypeDescriptor<number>,
+	U24 = u24 :: Types.TypeDescriptor<number>,
+	U32 = u32 :: Types.TypeDescriptor<number>,
+	I8 = i8 :: Types.TypeDescriptor<number>,
+	I16 = i16 :: Types.TypeDescriptor<number>,
+	I24 = i24 :: Types.TypeDescriptor<number>,
+	I32 = i32 :: Types.TypeDescriptor<number>,
+	F32 = f32 :: Types.TypeDescriptor<number>,
+	F48 = f48 :: Types.TypeDescriptor<number>,
+	F64 = f64 :: Types.TypeDescriptor<number>,
+	Boolean = boolean :: Types.TypeDescriptor<boolean>,
+	String = str :: Types.TypeDescriptor<string>,
+	Buffer = buff :: Types.TypeDescriptor<buffer>,
+	RawBuffer = buff :: Types.TypeDescriptor<buffer>,
+	VarU32 = VarInt.VarU32 :: Types.TypeDescriptor<number>,
+	VarI32 = VarInt.VarI32 :: Types.TypeDescriptor<number>,
+	varint = VarInt.VarU32 :: Types.TypeDescriptor<number>,
 	VarInt = VarInt,
-	color2 = color2,
+	color2 = color2 :: Types.TypeDescriptor<Color3>,
 	struct = Struct,
 	array = Array,
 	map = Map,
@@ -95,3 +99,7 @@ return table.freeze({
 	bitfield = Bitfield,
 	auto = Auto,
 })
+
+export type DataTypes = typeof(DataTypes)
+
+return DataTypes

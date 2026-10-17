@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	2-byte placeholder TypeDescriptor for Instance references.
@@ -21,9 +23,11 @@ const function skip(_buf: buffer, offset: number): number
 	return offset + 2
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<Instance?> = table.freeze({
 	size = 2,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor

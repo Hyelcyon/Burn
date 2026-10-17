@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	1-byte boolean TypeDescriptor (0 = false, 1 = true).
@@ -20,9 +22,11 @@ const function skip(_buf: buffer, offset: number): number
 	return offset + 1
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<boolean> = table.freeze({
 	size = 1,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor

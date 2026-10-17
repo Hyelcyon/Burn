@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	3-byte Color3 TypeDescriptor (3x u8 RGB channels in 0..255).
@@ -25,9 +27,11 @@ const function skip(_buf: buffer, offset: number): number
 	return offset + 3
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<Color3> = table.freeze({
 	size = 3,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor

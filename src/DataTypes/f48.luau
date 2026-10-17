@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	48-bit (6-byte) floating-point TypeDescriptor.
@@ -27,9 +29,11 @@ const function skip(_buf: buffer, offset: number): number
 	return offset + 6
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<number> = table.freeze({
 	size = 6,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor

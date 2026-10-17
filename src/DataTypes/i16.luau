@@ -1,5 +1,7 @@
 --!strict
 
+const Types = require("@src/Types")
+
 --[=[
 	@within DataTypes
 	Signed 16-bit integer TypeDescriptor (range [-32,768, 32,767], little-endian).
@@ -20,9 +22,11 @@ const function skip(_buf: buffer, offset: number): number
 	return offset + 2
 end
 
-return table.freeze({
+const descriptor: Types.TypeDescriptor<number> = table.freeze({
 	size = 2,
 	write = write,
 	read = read,
 	skip = skip,
 })
+
+return descriptor
