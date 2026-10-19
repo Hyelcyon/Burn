@@ -72,16 +72,20 @@ export type PacketDefinition<T> = {
 	read priorityIndex: number,
 	read schema: TypeDescriptor<T>,
 
-	read send: (self: PacketDefinition<T>, targetOrData: any, maybeData: any?) -> (),
-	read sendImmediate: (self: PacketDefinition<T>, targetOrData: any, maybeData: any?) -> (),
+	read send: (self: PacketDefinition<T>, targetOrData: Player | { Player } | T, maybeData: T?) -> (),
+	read sendImmediate: (self: PacketDefinition<T>, targetOrData: Player | { Player } | T, maybeData: T?) -> (),
 	read broadcast: (self: PacketDefinition<T>, data: T) -> (),
 	read broadcastExcept: (self: PacketDefinition<T>, excludedPlayer: Player, data: T) -> (),
 	read broadcastImmediate: (self: PacketDefinition<T>, data: T) -> (),
-	read on: (self: PacketDefinition<T>, listener: any) -> Connection,
-	read once: (self: PacketDefinition<T>, listener: any) -> Connection,
-	read wait: (self: PacketDefinition<T>) -> ...any,
-	read invoke: (self: PacketDefinition<T>, responseSchema: any, data: T) -> any,
-	read handleRequest: (self: PacketDefinition<T>, responseSchema: any, handler: any) -> (),
+	read on: (self: PacketDefinition<T>, listener: ((T) -> ()) | ((Player, T) -> ())) -> Connection,
+	read once: (self: PacketDefinition<T>, listener: ((T) -> ()) | ((Player, T) -> ())) -> Connection,
+	read wait: (self: PacketDefinition<T>) -> (Player?, T),
+	read invoke: <Res>(self: PacketDefinition<T>, responseSchema: TypeDescriptor<Res>, data: T) -> Res?,
+	read handleRequest: <Res>(
+		self: PacketDefinition<T>,
+		responseSchema: TypeDescriptor<Res>,
+		handler: (Player, T) -> Res
+	) -> (),
 }
 
 export type AnyPacketDefinition = {
@@ -92,16 +96,20 @@ export type AnyPacketDefinition = {
 	read priorityIndex: number,
 	read schema: AnyTypeDescriptor,
 
-	read send: (self: AnyPacketDefinition, ...any) -> (),
-	read sendImmediate: (self: AnyPacketDefinition, ...any) -> (),
-	read broadcast: (self: AnyPacketDefinition, data: any) -> (),
-	read broadcastExcept: (self: AnyPacketDefinition, excludedPlayer: Player, data: any) -> (),
-	read broadcastImmediate: (self: AnyPacketDefinition, data: any) -> (),
-	read on: (self: AnyPacketDefinition, listener: any) -> Connection,
-	read once: (self: AnyPacketDefinition, listener: any) -> Connection,
-	read wait: (self: AnyPacketDefinition) -> ...any,
-	read invoke: (self: AnyPacketDefinition, responseSchema: any, data: any) -> any,
-	read handleRequest: (self: AnyPacketDefinition, responseSchema: any, handler: any) -> (),
+	read send: (self: AnyPacketDefinition, targetOrData: unknown, maybeData: unknown?) -> (),
+	read sendImmediate: (self: AnyPacketDefinition, targetOrData: unknown, maybeData: unknown?) -> (),
+	read broadcast: (self: AnyPacketDefinition, data: unknown) -> (),
+	read broadcastExcept: (self: AnyPacketDefinition, excludedPlayer: Player, data: unknown) -> (),
+	read broadcastImmediate: (self: AnyPacketDefinition, data: unknown) -> (),
+	read on: (self: AnyPacketDefinition, listener: (unknown, unknown?) -> ()) -> Connection,
+	read once: (self: AnyPacketDefinition, listener: (unknown, unknown?) -> ()) -> Connection,
+	read wait: (self: AnyPacketDefinition) -> ...unknown,
+	read invoke: (self: AnyPacketDefinition, responseSchema: AnyTypeDescriptor, data: unknown) -> unknown,
+	read handleRequest: (
+		self: AnyPacketDefinition,
+		responseSchema: AnyTypeDescriptor,
+		handler: (unknown, unknown) -> unknown
+	) -> (),
 }
 
 export type ErasedPacketDefinition = AnyPacketDefinition

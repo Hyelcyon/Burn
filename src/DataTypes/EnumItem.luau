@@ -3,16 +3,10 @@
 const Types = require("@src/Types")
 
 export type EnumType<E> = {
-	GetEnumItems: (self: any) -> { E },
+	GetEnumItems: (self: unknown) -> { E },
 }
 
 export type EnumDescriptor<E> = Types.TypeDescriptor<E>
-
-@native
-const function write(buf: buffer, offset: number, value: any): number
-	buffer.writeu16(buf, offset, value.Value)
-	return offset + 2
-end
 
 @native
 const function skip(_buf: buffer, offset: number): number
@@ -26,8 +20,14 @@ end
 ]=]
 const function createEnumItemDescriptor<E>(enumType: EnumType<E> | Enum): Types.TypeDescriptor<E>
 	const itemsByValue: { [number]: E } = {}
-	for _, item in (enumType :: any):GetEnumItems() do
-		itemsByValue[(item :: any).Value] = item
+	for _, item in (enumType :: { GetEnumItems: (unknown) -> { E } }):GetEnumItems() do
+		itemsByValue[(item :: EnumItem).Value] = item
+	end
+
+	@native
+	const function write(buf: buffer, offset: number, value: E): number
+		buffer.writeu16(buf, offset, (value :: EnumItem).Value)
+		return offset + 2
 	end
 
 	@native
@@ -46,7 +46,7 @@ const function createEnumItemDescriptor<E>(enumType: EnumType<E> | Enum): Types.
 
 	return table.freeze({
 		size = 2,
-		write = write :: any,
+		write = write,
 		read = read,
 		skip = skip,
 	})

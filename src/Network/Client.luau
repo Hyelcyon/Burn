@@ -12,7 +12,7 @@ const OutgoingQueue = require("@network/OutgoingQueue")
 export type Connection = Types.Connection
 
 type ListenerNode = {
-	callback: (unknown) -> (),
+	callback: ((unknown) -> ())?,
 	connected: boolean,
 	next: ListenerNode?,
 	prev: ListenerNode?,
@@ -81,7 +81,7 @@ const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
 				end
 
 				while current ~= nil do
-					if current.connected then
+					if current.connected and current.callback ~= nil then
 						task.spawn(current.callback, data)
 					end
 					current = current.next
@@ -176,7 +176,7 @@ function Client.on<T>(packetDef: Types.PacketDefinition<T>, listener: (T) -> ())
 
 		node.prev = nil
 		node.next = nil
-		node.callback = nil :: any
+		node.callback = nil
 	end
 
 	return {

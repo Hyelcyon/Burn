@@ -36,7 +36,7 @@ function Cursor.new(raw: buffer, initialOffset: number?): Cursor
 	return setmetatable({
 		raw = raw,
 		offset = initialOffset or 0,
-	}, Cursor) :: any
+	}, Cursor) :: Cursor
 end
 
 @native

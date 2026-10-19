@@ -28,7 +28,7 @@ function ByteBuffer.create(initialCapacity: number?): ByteBuffer
 		raw = buffer.create(capacity),
 		capacity = capacity,
 		size = 0,
-	}, ByteBuffer) :: any
+	}, ByteBuffer) :: ByteBuffer
 end
 
 --[=[

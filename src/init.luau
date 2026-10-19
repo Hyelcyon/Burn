@@ -108,7 +108,9 @@ const function wait<T>(packet: Types.PacketDefinition<T>)
 end
 
 const function isPacketDefinition(value: unknown): boolean
-	return typeof(value) == "table" and (value :: any).id ~= nil and (value :: any).packetType ~= nil
+	return typeof(value) == "table"
+		and (value :: { id: unknown?, packetType: unknown? }).id ~= nil
+		and (value :: { id: unknown?, packetType: unknown? }).packetType ~= nil
 end
 
 --[=[

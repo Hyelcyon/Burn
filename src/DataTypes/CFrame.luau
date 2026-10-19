@@ -19,30 +19,35 @@ const function write(buf: buffer, offset: number, value: CFrame): number
 
 	-- Shepperd's algorithm: branch on the maximum diagonal element or trace to maximize the divisor
 	-- and prevent numerical instability / division by zero near rotational singularities.
+	-- Precomputing reciprocal invS replaces 3 expensive float divisions with 1 division and 3 fast multiplications.
 	const trace = r00 + r11 + r22
 	if trace > 0 then
 		const s = math.max(1e-6, math.sqrt(trace + 1.0) * 2)
+		const invS = 1.0 / s
 		qw = 0.25 * s
-		qx = (r21 - r12) / s
-		qy = (r02 - r20) / s
-		qz = (r10 - r01) / s
+		qx = (r21 - r12) * invS
+		qy = (r02 - r20) * invS
+		qz = (r10 - r01) * invS
 	elseif (r00 > r11) and (r00 > r22) then
 		const s = math.max(1e-6, math.sqrt(math.max(0, 1.0 + r00 - r11 - r22)) * 2)
-		qw = (r21 - r12) / s
+		const invS = 1.0 / s
+		qw = (r21 - r12) * invS
 		qx = 0.25 * s
-		qy = (r01 + r10) / s
-		qz = (r02 + r20) / s
+		qy = (r01 + r10) * invS
+		qz = (r02 + r20) * invS
 	elseif r11 > r22 then
 		const s = math.max(1e-6, math.sqrt(math.max(0, 1.0 + r11 - r00 - r22)) * 2)
-		qw = (r02 - r20) / s
-		qx = (r01 + r10) / s
+		const invS = 1.0 / s
+		qw = (r02 - r20) * invS
+		qx = (r01 + r10) * invS
 		qy = 0.25 * s
-		qz = (r12 + r21) / s
+		qz = (r12 + r21) * invS
 	else
 		const s = math.max(1e-6, math.sqrt(math.max(0, 1.0 + r22 - r00 - r11)) * 2)
-		qw = (r10 - r01) / s
-		qx = (r02 + r20) / s
-		qy = (r12 + r21) / s
+		const invS = 1.0 / s
+		qw = (r10 - r01) * invS
+		qx = (r02 + r20) * invS
+		qy = (r12 + r21) * invS
 		qz = 0.25 * s
 	end
 

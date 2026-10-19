@@ -13,7 +13,7 @@ const OutgoingQueue = require("@network/OutgoingQueue")
 export type Connection = Types.Connection
 
 type ListenerNode = {
-	callback: (Player, unknown) -> (),
+	callback: ((Player, unknown) -> ())?,
 	connected: boolean,
 	next: ListenerNode?,
 	prev: ListenerNode?,
@@ -51,19 +51,18 @@ end
 -- a minimum of MIN_PACKET_COST_BYTES (32 bytes) to penalize zero-byte and malformed flood attacks.
 @native
 const function checkRateLimit(player: Player, size: number): boolean
+	const now = os.clock()
 	local limit: RateLimit
 	const existing = playerRateLimits[player]
 	if existing == nil then
 		limit = {
-			lastTime = os.clock(),
+			lastTime = now,
 			currentBytes = Constants.RATE_LIMIT_BYTES_PER_SEC,
 		}
 		playerRateLimits[player] = limit
 	else
 		limit = existing
 	end
-
-	const now = os.clock()
 	const elapsed = math.max(0, now - limit.lastTime)
 	limit.currentBytes = math.min(
 		limit.currentBytes + (elapsed * Constants.RATE_LIMIT_BYTES_PER_SEC),
@@ -133,7 +132,7 @@ const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, e
 				end
 
 				while current ~= nil do
-					if current.connected then
+					if current.connected and current.callback ~= nil then
 						task.spawn(current.callback, player, data)
 					end
 					current = current.next
@@ -361,7 +360,7 @@ function Server.on<T>(packetDef: Types.PacketDefinition<T>, listener: (Player, T
 
 		node.prev = nil
 		node.next = nil
-		node.callback = nil :: any
+		node.callback = nil
 	end
 
 	return {
