@@ -1,6 +1,6 @@
 [package]
 name = "hyelcyon/burn"
-version = "0.1.5"
+version = "0.1.6"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 description = "Compact, high-performance binary networking library for Roblox built on Luau buffer"

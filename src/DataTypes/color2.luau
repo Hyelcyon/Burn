@@ -10,9 +10,9 @@ const Types = require("@src/Types")
 ]=]
 @native
 const function write(buf: buffer, offset: number, value: Color3): number
-	const r = math.round(value.R * 31)
-	const g = math.round(value.G * 63)
-	const b = math.round(value.B * 31)
+	const r = math.clamp(math.round(value.R * 31), 0, 31)
+	const g = math.clamp(math.round(value.G * 63), 0, 63)
+	const b = math.clamp(math.round(value.B * 31), 0, 31)
 	const packed = bit32.bor(bit32.lshift(r, 11), bit32.lshift(g, 5), b)
 	buffer.writeu16(buf, offset, packed)
 	return offset + 2
@@ -20,6 +20,10 @@ end
 
 @native
 const function read(buf: buffer, offset: number): (Color3, number)
+	const bufLen = buffer.len(buf)
+	if offset + 2 > bufLen then
+		error(`[Burn] Buffer underflow: cannot read Color2 at offset {offset} (bufLen {bufLen})`)
+	end
 	const packed = buffer.readu16(buf, offset)
 	const r = bit32.rshift(packed, 11) * (1 / 31)
 	const g = bit32.band(bit32.rshift(packed, 5), 0x3F) * (1 / 63)

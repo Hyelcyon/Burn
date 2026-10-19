@@ -19,6 +19,10 @@ end
 
 @native
 const function read(buf: buffer, offset: number): (number, number)
+	const bufLen = buffer.len(buf)
+	if offset + 6 > bufLen then
+		error(`[Burn] Buffer underflow: cannot read f48 at offset {offset} (bufLen {bufLen})`)
+	end
 	buffer.writeu16(scratch, 0, 0)
 	buffer.copy(scratch, 2, buf, offset, 6)
 	return buffer.readf64(scratch, 0), offset + 6

@@ -8,10 +8,16 @@ type function InferStructType(T: type)
 	end
 	const resultTable = types.newtable()
 	const readKey = types.singleton("read")
+	const schemaKey = types.singleton("schema")
 	for key, prop in T:properties() do
 		const descType = prop.read or prop.write
 		if descType and descType:is("table") then
-			const readProp = descType:readproperty(readKey)
+			local targetDesc = descType
+			const schemaProp = descType:readproperty(schemaKey)
+			if schemaProp and schemaProp:is("table") then
+				targetDesc = schemaProp
+			end
+			const readProp = targetDesc:readproperty(readKey)
 			if readProp and readProp:is("function") then
 				const rets = readProp:returns().head
 				if rets and #rets > 0 then
@@ -23,6 +29,9 @@ type function InferStructType(T: type)
 	return resultTable
 end
 
+export type StructDescriptor<F> = Types.TypeDescriptor<InferStructType<F>>
+export type InferStruct<F> = InferStructType<F>
+
 type FieldEntry = {
 	key: string,
 	desc: Types.AnyTypeDescriptor,
@@ -33,7 +42,7 @@ type FieldEntry = {
 	Creates a structured record TypeDescriptor from a map of field descriptors.
 	Fields are serialized in lexicographical order to guarantee wire-format stability.
 ]=]
-const function Struct<F>(fields: F & { read [string]: Types.AnyTypeDescriptor }): Types.TypeDescriptor<InferStructType<F>>
+const function Struct<F>(fields: F & { read [string]: Types.AnyTypeDescriptor }): StructDescriptor<F>
 	type T = InferStructType<F>
 
 	const fieldMap: { read [string]: Types.AnyTypeDescriptor } = fields
@@ -310,12 +319,12 @@ const function Struct<F>(fields: F & { read [string]: Types.AnyTypeDescriptor })
 		skip = skipDynamic
 	end
 
-	return {
+	return table.freeze({
 		size = totalFixedSize,
 		write = write,
 		read = read,
 		skip = skip,
-	}
+	})
 end
 
 return Struct

@@ -19,6 +19,7 @@ type function InferBitfieldType(T: type)
 end
 
 export type BitfieldDescriptor<F> = Types.TypeDescriptor<InferBitfieldType<F>>
+export type InferBitfield<F> = InferBitfieldType<F>
 
 --[=[
 	@within DataTypes
@@ -244,6 +245,15 @@ const function Bitfield<F>(flagList: F & { [number]: string }): BitfieldDescript
 		end
 	end
 
+	const rawRead = read
+	const function checkedRead(buf: buffer, offset: number): (T, number)
+		const bufLen = buffer.len(buf)
+		if offset + byteSize > bufLen then
+			error(`[Burn] Buffer underflow: cannot read Bitfield at offset {offset} (bufLen {bufLen})`)
+		end
+		return rawRead(buf, offset)
+	end
+
 	@native
 	const function skip(_buf: buffer, offset: number): number
 		return offset + byteSize
@@ -252,7 +262,7 @@ const function Bitfield<F>(flagList: F & { [number]: string }): BitfieldDescript
 	return table.freeze({
 		size = byteSize,
 		write = write,
-		read = read,
+		read = checkedRead,
 		skip = skip,
 	})
 end

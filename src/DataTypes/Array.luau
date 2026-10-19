@@ -2,11 +2,13 @@
 
 const Types = require("@src/Types")
 
+export type ArrayDescriptor<T> = Types.TypeDescriptor<{ T }>
+
 --[=[
 	@within DataTypes
 	Creates a variable-length list TypeDescriptor with a 2-byte (u16) element count prefix.
 ]=]
-const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeDescriptor<{ T }>
+const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): ArrayDescriptor<T>
 	const elemWrite = elementDescriptor.write
 	const elemRead = elementDescriptor.read
 	const elemSkip = elementDescriptor.skip
@@ -57,13 +59,25 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeD
 		-- O(1) skip: Fixed-size elements allow calculating the total payload offset without loop traversal.
 		@native
 		local function skipFixed(buf: buffer, offset: number): number
+			const bufLen = buffer.len(buf)
+			if offset + 2 > bufLen then
+				error(`[Burn] Buffer underflow: cannot read array count at offset {offset} (bufLen {bufLen})`)
+			end
 			const count = buffer.readu16(buf, offset)
-			return offset + 2 + count * elemSize
+			const nextOffset = offset + 2 + count * elemSize
+			if nextOffset > bufLen then
+				error(`[Burn] Buffer underflow: array of {count} fixed elements exceeds buffer size {bufLen}`)
+			end
+			return nextOffset
 		end
 		skip = skipFixed
 	else
 		@native
 		local function skipDynamic(buf: buffer, offset: number): number
+			const bufLen = buffer.len(buf)
+			if offset + 2 > bufLen then
+				error(`[Burn] Buffer underflow: cannot read array count at offset {offset} (bufLen {bufLen})`)
+			end
 			const count = buffer.readu16(buf, offset)
 			local currentOffset = offset + 2
 
@@ -76,12 +90,12 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeD
 		skip = skipDynamic
 	end
 
-	return {
+	return table.freeze({
 		size = nil,
 		write = write,
 		read = read,
 		skip = skip,
-	}
+	})
 end
 
 return Array

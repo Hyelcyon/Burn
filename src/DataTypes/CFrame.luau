@@ -21,25 +21,25 @@ const function write(buf: buffer, offset: number, value: CFrame): number
 	-- and prevent numerical instability / division by zero near rotational singularities.
 	const trace = r00 + r11 + r22
 	if trace > 0 then
-		const s = math.sqrt(trace + 1.0) * 2
+		const s = math.max(1e-6, math.sqrt(trace + 1.0) * 2)
 		qw = 0.25 * s
 		qx = (r21 - r12) / s
 		qy = (r02 - r20) / s
 		qz = (r10 - r01) / s
 	elseif (r00 > r11) and (r00 > r22) then
-		const s = math.sqrt(1.0 + r00 - r11 - r22) * 2
+		const s = math.max(1e-6, math.sqrt(math.max(0, 1.0 + r00 - r11 - r22)) * 2)
 		qw = (r21 - r12) / s
 		qx = 0.25 * s
 		qy = (r01 + r10) / s
 		qz = (r02 + r20) / s
 	elseif r11 > r22 then
-		const s = math.sqrt(1.0 + r11 - r00 - r22) * 2
+		const s = math.max(1e-6, math.sqrt(math.max(0, 1.0 + r11 - r00 - r22)) * 2)
 		qw = (r02 - r20) / s
 		qx = (r01 + r10) / s
 		qy = 0.25 * s
 		qz = (r12 + r21) / s
 	else
-		const s = math.sqrt(1.0 + r22 - r00 - r11) * 2
+		const s = math.max(1e-6, math.sqrt(math.max(0, 1.0 + r22 - r00 - r11)) * 2)
 		qw = (r10 - r01) / s
 		qx = (r02 + r20) / s
 		qy = (r12 + r21) / s
@@ -59,6 +59,10 @@ end
 
 @native
 const function read(buf: buffer, offset: number): (CFrame, number)
+	const bufLen = buffer.len(buf)
+	if offset + 28 > bufLen then
+		error(`[Burn] Buffer underflow: cannot read CFrame at offset {offset} (bufLen {bufLen})`)
+	end
 	const x = buffer.readf32(buf, offset)
 	const y = buffer.readf32(buf, offset + 4)
 	const z = buffer.readf32(buf, offset + 8)

@@ -104,6 +104,16 @@ function Cursor.skipType<T>(self: Cursor, descriptor: Types.TypeDescriptor<T>): 
 end
 
 --[=[
+	Deserializes a value using the descriptor's `read` logic and advances cursor offset.
+]=]
+@native
+function Cursor.readType<T>(self: Cursor, descriptor: Types.TypeDescriptor<T>): T
+	local value: T
+	value, self.offset = descriptor.read(self.raw, self.offset)
+	return value
+end
+
+--[=[
 	Returns the number of unread bytes remaining before end of buffer.
 ]=]
 @native

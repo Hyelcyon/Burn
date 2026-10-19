@@ -31,7 +31,15 @@ const Auto = require("@datatypes/Auto")
 const Bitfield = require("@datatypes/Bitfield")
 const VarInt = require("@datatypes/VarInt")
 
+export type StructDescriptor<F> = Struct.StructDescriptor<F>
+export type InferStruct<F> = Struct.InferStruct<F>
 export type BitfieldDescriptor<F> = Bitfield.BitfieldDescriptor<F>
+export type InferBitfield<F> = Bitfield.InferBitfield<F>
+export type ArrayDescriptor<T> = Array.ArrayDescriptor<T>
+export type MapDescriptor<K, V> = Map.MapDescriptor<K, V>
+export type OptionalDescriptor<T> = Optional.OptionalDescriptor<T>
+export type EnumDescriptor<E> = EnumItem.EnumDescriptor<E>
+export type InstanceDescriptor<T = Instance?> = Instance.InstanceDescriptor<T>
 
 --[=[
 	@class DataTypes

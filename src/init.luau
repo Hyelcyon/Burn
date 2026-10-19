@@ -22,7 +22,15 @@ export type Connection = Types.Connection
 export type NetworkContext = Types.NetworkContext
 export type ByteBuffer = Buffer.ByteBuffer
 export type Cursor = Buffer.Cursor
+export type StructDescriptor<F> = DataTypes.StructDescriptor<F>
+export type InferStruct<F> = DataTypes.InferStruct<F>
 export type BitfieldDescriptor<F> = DataTypes.BitfieldDescriptor<F>
+export type InferBitfield<F> = DataTypes.InferBitfield<F>
+export type ArrayDescriptor<T> = DataTypes.ArrayDescriptor<T>
+export type MapDescriptor<K, V> = DataTypes.MapDescriptor<K, V>
+export type OptionalDescriptor<T> = DataTypes.OptionalDescriptor<T>
+export type EnumDescriptor<E> = DataTypes.EnumDescriptor<E>
+export type InstanceDescriptor<T = Instance?> = DataTypes.InstanceDescriptor<T>
 export type DataTypes = DataTypes.DataTypes
 export type Infer<D> = Types.Infer<D>
 export type TypeOf<D> = Types.TypeOf<D>

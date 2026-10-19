@@ -55,23 +55,29 @@ const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
 			if packetDef ~= nil and packetDef.packetType == expectedType then
 				const fixedSize = packetDef.schema.size
 				if typeof(fixedSize) == "number" and payloadLen ~= fixedSize then
-					break
+					offset = nextOffset
+					continue
 				end
 
 				local success: boolean, res1: unknown, res2: unknown =
 					pcall(packetDef.schema.read, rawBuf, payloadStart)
 				if not success then
 					warn(`[Burn] Failed to decode incoming packet '{packetDef.name}' (id {packetId}): {res1}`)
-					break
+					offset = nextOffset
+					continue
 				end
 
 				const data = res1
 				const readEndOffset = res2
 
 				-- Deserializer must consume exactly the advertised payload bytes.
-				-- Any discrepancy indicates stream corruption or schema drift; abort batch to prevent desync.
+				-- Any discrepancy indicates stream corruption or schema drift; skip packet to prevent desync.
 				if typeof(readEndOffset) == "number" and readEndOffset ~= nextOffset then
-					break
+					warn(
+						`[Burn] Packet '{packetDef.name}' payload desync: read end {readEndOffset}, expected {nextOffset}`
+					)
+					offset = nextOffset
+					continue
 				end
 
 				while current ~= nil do
@@ -170,6 +176,8 @@ function Client.on<T>(packetDef: Types.PacketDefinition<T>, listener: (T) -> ())
 			end
 
 			node.prev = nil
+			node.next = nil
+			node.callback = nil :: any
 		end,
 	}
 end
@@ -222,12 +230,22 @@ function Client.invoke<Req, Res>(
 		return nil
 	end
 
-	const resData, readEndOffset = responseSchema.read(resBuf, Constants.HEADER_SIZE)
+	const readOk, res1, res2 = pcall(responseSchema.read, resBuf, Constants.HEADER_SIZE)
+	if not readOk then
+		return nil
+	end
+
+	const resData = res1
+	const readEndOffset = res2
 	if typeof(readEndOffset) == "number" and readEndOffset ~= expectedEnd then
 		return nil
 	end
 
-	return resData
+	return resData :: Res
+end
+
+if RunService:IsClient() then
+	ensureListening()
 end
 
 return Client

@@ -2,11 +2,13 @@
 
 const Types = require("@src/Types")
 
+export type OptionalDescriptor<T> = Types.TypeDescriptor<T?>
+
 --[=[
 	@within DataTypes
 	Creates an Optional TypeDescriptor prefixed with a 1-byte presence flag (0 = nil, 1 = present).
 ]=]
-const function Optional<T>(descriptor: Types.TypeDescriptor<T>): Types.TypeDescriptor<T?>
+const function Optional<T>(descriptor: Types.TypeDescriptor<T>): OptionalDescriptor<T>
 	const innerWrite = descriptor.write
 	const innerRead = descriptor.read
 	const innerSkip = descriptor.skip
@@ -25,6 +27,10 @@ const function Optional<T>(descriptor: Types.TypeDescriptor<T>): Types.TypeDescr
 
 	@native
 	const function read(buf: buffer, offset: number): (T?, number)
+		const bufLen = buffer.len(buf)
+		if offset >= bufLen then
+			error(`[Burn] Buffer underflow: cannot read Optional flag at offset {offset} (bufLen {bufLen})`)
+		end
 		if buffer.readu8(buf, offset) ~= 0 then
 			return innerRead(buf, offset + 1)
 		end
@@ -36,8 +42,16 @@ const function Optional<T>(descriptor: Types.TypeDescriptor<T>): Types.TypeDescr
 		const fixedSize = innerSize
 		@native
 		local function skipFixed(buf: buffer, offset: number): number
+			const bufLen = buffer.len(buf)
+			if offset >= bufLen then
+				error(`[Burn] Buffer underflow: cannot read Optional flag at offset {offset} (bufLen {bufLen})`)
+			end
 			if buffer.readu8(buf, offset) ~= 0 then
-				return offset + 1 + fixedSize
+				const nextOffset = offset + 1 + fixedSize
+				if nextOffset > bufLen then
+					error(`[Burn] Buffer underflow: Optional payload exceeds buffer size {bufLen}`)
+				end
+				return nextOffset
 			end
 			return offset + 1
 		end
@@ -45,6 +59,10 @@ const function Optional<T>(descriptor: Types.TypeDescriptor<T>): Types.TypeDescr
 	else
 		@native
 		local function skipDynamic(buf: buffer, offset: number): number
+			const bufLen = buffer.len(buf)
+			if offset >= bufLen then
+				error(`[Burn] Buffer underflow: cannot read Optional flag at offset {offset} (bufLen {bufLen})`)
+			end
 			if buffer.readu8(buf, offset) ~= 0 then
 				return innerSkip(buf, offset + 1)
 			end
@@ -53,12 +71,12 @@ const function Optional<T>(descriptor: Types.TypeDescriptor<T>): Types.TypeDescr
 		skip = skipDynamic
 	end
 
-	return {
+	return table.freeze({
 		size = nil,
 		write = write,
 		read = read,
 		skip = skip,
-	}
+	})
 end
 
 return Optional

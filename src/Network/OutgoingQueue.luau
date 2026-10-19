@@ -51,6 +51,11 @@ const function isPlayerActive(player: Player): boolean
 	return not removingPlayers[player] and player.Parent == Players
 end
 
+@native
+const function getQueuesTotalSize(queues: PriorityQueues): number
+	return queues[4].size + queues[3].size + queues[2].size + queues[1].size
+end
+
 -- Concatenates queues in descending priority order (Max [4], High [3], Medium [2], Low [1]).
 -- If all data belongs to a single priority, compacts that buffer directly to avoid allocation.
 @native
@@ -335,10 +340,11 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 				)
 			end
 			const target = clientUnreliable[priorityIndex]
+			const totalQueued = getQueuesTotalSize(clientUnreliable)
 			if
 				isClientChannelReady
-				and target.size > 0
-				and target.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES
+				and totalQueued > 0
+				and totalQueued + packetTotal > Constants.MAX_UNRELIABLE_BYTES
 			then
 				const flushed = flushPriorityQueues(clientUnreliable)
 				if flushed ~= nil then
@@ -348,7 +354,8 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 			writeFixedToBuffer(target, packetDef, schemaSize, data)
 		else
 			const target = clientReliable[priorityIndex]
-			if isClientChannelReady and target.size > 0 and target.size + packetTotal > Constants.MAX_PACKET_SIZE then
+			const totalQueued = getQueuesTotalSize(clientReliable)
+			if isClientChannelReady and totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_PACKET_SIZE then
 				const flushed = flushPriorityQueues(clientReliable)
 				if flushed ~= nil then
 					Channel.getReliableEvent():FireServer(flushed)
@@ -369,7 +376,8 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 			)
 		end
 		const target = clientUnreliable[priorityIndex]
-		if isClientChannelReady and target.size > 0 and target.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+		const totalQueued = getQueuesTotalSize(clientUnreliable)
+		if isClientChannelReady and totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
 			const flushed = flushPriorityQueues(clientUnreliable)
 			if flushed ~= nil then
 				Channel.getUnreliableEvent():FireServer(flushed)
@@ -378,7 +386,8 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 		writeSerializedToBuffer(target, packetDef.id, scratchRaw, payloadLen)
 	else
 		const target = clientReliable[priorityIndex]
-		if isClientChannelReady and target.size > 0 and target.size + packetTotal > Constants.MAX_PACKET_SIZE then
+		const totalQueued = getQueuesTotalSize(clientReliable)
+		if isClientChannelReady and totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_PACKET_SIZE then
 			const flushed = flushPriorityQueues(clientReliable)
 			if flushed ~= nil then
 				Channel.getReliableEvent():FireServer(flushed)
@@ -418,7 +427,8 @@ const function enqueuePreSerializedVerified<T>(
 		end
 		const pQueues = getPlayerQueues(playerUnreliable, player)
 		const buf = pQueues[priorityIndex]
-		if buf.size > 0 and buf.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+		const totalQueued = getQueuesTotalSize(pQueues)
+		if totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
 			const flushed = flushPriorityQueues(pQueues)
 			if flushed ~= nil then
 				Channel.getUnreliableEvent():FireClient(player, flushed)
@@ -432,7 +442,8 @@ const function enqueuePreSerializedVerified<T>(
 	else
 		const pQueues = getPlayerQueues(playerReliable, player)
 		const buf = pQueues[priorityIndex]
-		if buf.size > 0 and buf.size + packetTotal > Constants.MAX_PACKET_SIZE then
+		const totalQueued = getQueuesTotalSize(pQueues)
+		if totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_PACKET_SIZE then
 			const flushed = flushPriorityQueues(pQueues)
 			if flushed ~= nil then
 				Channel.getReliableEvent():FireClient(player, flushed)
@@ -469,7 +480,8 @@ function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketD
 			end
 			const pQueues = getPlayerQueues(playerUnreliable, player)
 			const buf = pQueues[priorityIndex]
-			if buf.size > 0 and buf.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+			const totalQueued = getQueuesTotalSize(pQueues)
+			if totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
 				const flushed = flushPriorityQueues(pQueues)
 				if flushed ~= nil then
 					Channel.getUnreliableEvent():FireClient(player, flushed)
@@ -483,7 +495,8 @@ function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketD
 		else
 			const pQueues = getPlayerQueues(playerReliable, player)
 			const buf = pQueues[priorityIndex]
-			if buf.size > 0 and buf.size + packetTotal > Constants.MAX_PACKET_SIZE then
+			const totalQueued = getQueuesTotalSize(pQueues)
+			if totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_PACKET_SIZE then
 				const flushed = flushPriorityQueues(pQueues)
 				if flushed ~= nil then
 					Channel.getReliableEvent():FireClient(player, flushed)
@@ -538,7 +551,8 @@ function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, 
 				)
 			end
 			const buf = broadcastUnreliable[priorityIndex]
-			if buf.size > 0 and buf.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+			const totalQueued = getQueuesTotalSize(broadcastUnreliable)
+			if totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
 				const flushed = flushPriorityQueues(broadcastUnreliable)
 				if flushed ~= nil then
 					Channel.getUnreliableEvent():FireAllClients(flushed)
@@ -547,7 +561,8 @@ function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, 
 			writeFixedToBuffer(buf, packetDef, schemaSize, data)
 		else
 			const buf = broadcastReliable[priorityIndex]
-			if buf.size > 0 and buf.size + packetTotal > Constants.MAX_PACKET_SIZE then
+			const totalQueued = getQueuesTotalSize(broadcastReliable)
+			if totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_PACKET_SIZE then
 				const flushed = flushPriorityQueues(broadcastReliable)
 				if flushed ~= nil then
 					Channel.getReliableEvent():FireAllClients(flushed)
@@ -568,7 +583,8 @@ function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, 
 			)
 		end
 		const buf = broadcastUnreliable[priorityIndex]
-		if buf.size > 0 and buf.size + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+		const totalQueued = getQueuesTotalSize(broadcastUnreliable)
+		if totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_UNRELIABLE_BYTES then
 			const flushed = flushPriorityQueues(broadcastUnreliable)
 			if flushed ~= nil then
 				Channel.getUnreliableEvent():FireAllClients(flushed)
@@ -577,7 +593,8 @@ function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, 
 		writeSerializedToBuffer(buf, packetDef.id, scratchRaw, payloadLen)
 	else
 		const buf = broadcastReliable[priorityIndex]
-		if buf.size > 0 and buf.size + packetTotal > Constants.MAX_PACKET_SIZE then
+		const totalQueued = getQueuesTotalSize(broadcastReliable)
+		if totalQueued > 0 and totalQueued + packetTotal > Constants.MAX_PACKET_SIZE then
 			const flushed = flushPriorityQueues(broadcastReliable)
 			if flushed ~= nil then
 				Channel.getReliableEvent():FireAllClients(flushed)
@@ -593,7 +610,7 @@ function OutgoingQueue.serverBroadcastExcept<T>(excludedPlayer: Player, packetDe
 	end
 	const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
 	for _, player in Players:GetPlayers() do
-		if player ~= excludedPlayer and not removingPlayers[player] then
+		if player ~= excludedPlayer and isPlayerActive(player) then
 			enqueuePreSerializedVerified(player, packetDef, scratchRaw, payloadLen)
 		end
 	end
@@ -649,6 +666,10 @@ function OutgoingQueue.serverBroadcastImmediate<T>(packetDef: Types.PacketDefini
 	else
 		Channel.getReliableEvent():FireAllClients(buf)
 	end
+end
+
+if RunService:IsServer() then
+	OutgoingQueue.init()
 end
 
 return OutgoingQueue

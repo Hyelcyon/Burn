@@ -16,6 +16,10 @@ end
 
 @native
 const function read(buf: buffer, offset: number): (Color3, number)
+	const bufLen = buffer.len(buf)
+	if offset + 3 > bufLen then
+		error(`[Burn] Buffer underflow: cannot read Color3 at offset {offset} (bufLen {bufLen})`)
+	end
 	const r = buffer.readu8(buf, offset)
 	const g = buffer.readu8(buf, offset + 1)
 	const b = buffer.readu8(buf, offset + 2)

@@ -2,6 +2,8 @@
 
 const Types = require("@src/Types")
 
+export type MapDescriptor<K, V> = Types.TypeDescriptor<{ [K]: V }>
+
 --[=[
 	@within DataTypes
 	Creates a dictionary TypeDescriptor with a 2-byte (u16) entry count prefix followed by key-value pairs.
@@ -9,7 +11,7 @@ const Types = require("@src/Types")
 const function Map<K, V>(
 	keyDescriptor: Types.TypeDescriptor<K>,
 	valueDescriptor: Types.TypeDescriptor<V>
-): Types.TypeDescriptor<{ [K]: V }>
+): MapDescriptor<K, V>
 	const keyWrite = keyDescriptor.write
 	const keyRead = keyDescriptor.read
 	const keySkip = keyDescriptor.skip
@@ -46,6 +48,13 @@ const function Map<K, V>(
 		const count = buffer.readu16(buf, offset)
 		local currentOffset = offset + 2
 
+		if keyDescriptor.size ~= nil and valueDescriptor.size ~= nil then
+			const fixedEntrySize = keyDescriptor.size + valueDescriptor.size
+			if currentOffset + count * fixedEntrySize > bufLen then
+				error(`[Burn] Buffer underflow: map of {count} fixed entries exceeds buffer size {bufLen}`)
+			end
+		end
+
 		const dict: { [K]: V } = {}
 		local k: K
 		local v: V
@@ -64,13 +73,25 @@ const function Map<K, V>(
 		-- O(1) skip: When both key and value have known static sizes, skip computes offset directly.
 		@native
 		local function skipFixed(buf: buffer, offset: number): number
+			const bufLen = buffer.len(buf)
+			if offset + 2 > bufLen then
+				error(`[Burn] Buffer underflow: cannot read map entry count at offset {offset} (bufLen {bufLen})`)
+			end
 			const count = buffer.readu16(buf, offset)
-			return offset + 2 + count * fixedEntrySize
+			const nextOffset = offset + 2 + count * fixedEntrySize
+			if nextOffset > bufLen then
+				error(`[Burn] Buffer underflow: map of {count} fixed entries exceeds buffer size {bufLen}`)
+			end
+			return nextOffset
 		end
 		skip = skipFixed
 	else
 		@native
 		local function skipDynamic(buf: buffer, offset: number): number
+			const bufLen = buffer.len(buf)
+			if offset + 2 > bufLen then
+				error(`[Burn] Buffer underflow: cannot read map entry count at offset {offset} (bufLen {bufLen})`)
+			end
 			const count = buffer.readu16(buf, offset)
 			local currentOffset = offset + 2
 
@@ -84,12 +105,12 @@ const function Map<K, V>(
 		skip = skipDynamic
 	end
 
-	return {
+	return table.freeze({
 		size = nil,
 		write = write,
 		read = read,
 		skip = skip,
-	}
+	})
 end
 
 return Map

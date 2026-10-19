@@ -10,12 +10,16 @@ const Types = require("@src/Types")
 @native
 const function write(buf: buffer, offset: number, value: number): number
 	buffer.writeu16(buf, offset, bit32.band(value, 0xFFFF))
-	buffer.writeu8(buf, offset + 2, bit32.rshift(value, 16))
+	buffer.writeu8(buf, offset + 2, bit32.band(bit32.rshift(value, 16), 0xFF))
 	return offset + 3
 end
 
 @native
 const function read(buf: buffer, offset: number): (number, number)
+	const bufLen = buffer.len(buf)
+	if offset + 3 > bufLen then
+		error(`[Burn] Buffer underflow: cannot read u24 at offset {offset} (bufLen {bufLen})`)
+	end
 	const low = buffer.readu16(buf, offset)
 	const high = buffer.readu8(buf, offset + 2)
 	return low + high * 65536, offset + 3

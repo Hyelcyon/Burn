@@ -48,14 +48,14 @@ const function definePacket<T>(
 
 	const resolvedPriority, priorityIndex = priorityToIndex(priority)
 
-	return {
+	return table.freeze({
 		id = id,
 		name = name,
 		packetType = resolvedPacketType,
 		priority = resolvedPriority,
 		priorityIndex = priorityIndex,
 		schema = schema,
-	}
+	})
 end
 
 return definePacket

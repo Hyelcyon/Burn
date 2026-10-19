@@ -37,17 +37,30 @@ end
 
 @native
 const function readVarU32(buf: buffer, offset: number): (number, number)
+	const bufLen = buffer.len(buf)
+	if offset >= bufLen then
+		error(`[Burn] Buffer underflow: cannot read VarU32 at offset {offset} (bufLen {bufLen})`)
+	end
 	const b0 = buffer.readu8(buf, offset)
 	if bit32.band(b0, 0x80) == 0 then
 		return b0, offset + 1
+	end
+	if offset + 1 >= bufLen then
+		error(`[Burn] Buffer underflow: truncated VarU32 at offset {offset} (bufLen {bufLen})`)
 	end
 	const b1 = buffer.readu8(buf, offset + 1)
 	if bit32.band(b1, 0x80) == 0 then
 		return bit32.bor(bit32.band(b0, 0x7F), bit32.lshift(b1, 7)), offset + 2
 	end
+	if offset + 2 >= bufLen then
+		error(`[Burn] Buffer underflow: truncated VarU32 at offset {offset} (bufLen {bufLen})`)
+	end
 	const b2 = buffer.readu8(buf, offset + 2)
 	if bit32.band(b2, 0x80) == 0 then
 		return bit32.bor(bit32.band(b0, 0x7F), bit32.lshift(bit32.band(b1, 0x7F), 7), bit32.lshift(b2, 14)), offset + 3
+	end
+	if offset + 3 >= bufLen then
+		error(`[Burn] Buffer underflow: truncated VarU32 at offset {offset} (bufLen {bufLen})`)
 	end
 	const b3 = buffer.readu8(buf, offset + 3)
 	if bit32.band(b3, 0x80) == 0 then
@@ -59,22 +72,34 @@ const function readVarU32(buf: buffer, offset: number): (number, number)
 		),
 			offset + 4
 	end
+	if offset + 4 >= bufLen then
+		error(`[Burn] Buffer underflow: truncated VarU32 at offset {offset} (bufLen {bufLen})`)
+	end
 	const b4 = buffer.readu8(buf, offset + 4)
 	return bit32.bor(
 		bit32.band(b0, 0x7F),
 		bit32.lshift(bit32.band(b1, 0x7F), 7),
 		bit32.lshift(bit32.band(b2, 0x7F), 14),
 		bit32.lshift(bit32.band(b3, 0x7F), 21),
-		bit32.lshift(b4, 28)
+		bit32.lshift(bit32.band(b4, 0x0F), 28)
 	),
 		offset + 5
 end
 
 @native
 const function skipVarU32(buf: buffer, offset: number): number
+	const bufLen = buffer.len(buf)
 	local cur = offset
-	while bit32.band(buffer.readu8(buf, cur), 0x80) ~= 0 do
+	local bytesRead = 0
+	while cur < bufLen and bit32.band(buffer.readu8(buf, cur), 0x80) ~= 0 do
 		cur += 1
+		bytesRead += 1
+		if bytesRead >= 5 then
+			error(`[Burn] Corrupted VarInt: continuation exceeds 5 bytes at offset {offset}`)
+		end
+	end
+	if cur >= bufLen then
+		error(`[Burn] Buffer underflow: truncated VarInt at offset {offset} (bufLen {bufLen})`)
 	end
 	return cur + 1
 end

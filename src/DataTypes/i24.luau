@@ -16,6 +16,10 @@ end
 
 @native
 const function read(buf: buffer, offset: number): (number, number)
+	const bufLen = buffer.len(buf)
+	if offset + 3 > bufLen then
+		error(`[Burn] Buffer underflow: cannot read i24 at offset {offset} (bufLen {bufLen})`)
+	end
 	const low = buffer.readu16(buf, offset)
 	const high = buffer.readi8(buf, offset + 2)
 	return low + high * 65536, offset + 3

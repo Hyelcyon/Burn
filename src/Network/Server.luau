@@ -110,7 +110,8 @@ const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, e
 			if packetDef ~= nil and packetDef.packetType == expectedType then
 				const fixedSize = packetDef.schema.size
 				if typeof(fixedSize) == "number" and payloadLen ~= fixedSize then
-					break
+					offset = nextOffset
+					continue
 				end
 
 				local success: boolean, res1: unknown, res2: unknown =
@@ -360,6 +361,8 @@ function Server.on<T>(packetDef: Types.PacketDefinition<T>, listener: (Player, T
 			end
 
 			node.prev = nil
+			node.next = nil
+			node.callback = nil :: any
 		end,
 	}
 end
@@ -380,6 +383,10 @@ function Server.handleRequest<Req, Res>(
 		const resData = handler(player, reqData :: Req)
 		return resData, responseSchema
 	end
+end
+
+if RunService:IsServer() then
+	ensureListening()
 end
 
 return Server

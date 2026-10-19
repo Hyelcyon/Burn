@@ -15,6 +15,10 @@ end
 
 @native
 const function read(buf: buffer, offset: number): (Vector2, number)
+	const bufLen = buffer.len(buf)
+	if offset + 8 > bufLen then
+		error(`[Burn] Buffer underflow: cannot read Vector2 at offset {offset} (bufLen {bufLen})`)
+	end
 	const x = buffer.readf32(buf, offset)
 	const y = buffer.readf32(buf, offset + 4)
 	return Vector2.new(x, y), offset + 8

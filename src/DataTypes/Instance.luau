@@ -2,6 +2,8 @@
 
 const Types = require("@src/Types")
 
+export type InstanceDescriptor<T = Instance?> = Types.TypeDescriptor<T>
+
 --[=[
 	@within DataTypes
 	2-byte placeholder TypeDescriptor for Instance references.
@@ -14,12 +16,20 @@ const function write(buf: buffer, offset: number, _value: Instance?): number
 end
 
 @native
-const function read(_buf: buffer, offset: number): (Instance?, number)
+const function read(buf: buffer, offset: number): (Instance?, number)
+	const bufLen = buffer.len(buf)
+	if offset + 2 > bufLen then
+		error(`[Burn] Buffer underflow: cannot read Instance reference at offset {offset} (bufLen {bufLen})`)
+	end
 	return nil, offset + 2
 end
 
 @native
-const function skip(_buf: buffer, offset: number): number
+const function skip(buf: buffer, offset: number): number
+	const bufLen = buffer.len(buf)
+	if offset + 2 > bufLen then
+		error(`[Burn] Buffer underflow: cannot skip Instance reference at offset {offset} (bufLen {bufLen})`)
+	end
 	return offset + 2
 end
 
