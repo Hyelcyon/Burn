@@ -113,9 +113,22 @@ const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, e
 					break
 				end
 
-				const data, readEndOffset = packetDef.schema.read(rawBuf, payloadStart)
+				local success: boolean, res1: unknown, res2: unknown =
+					pcall(packetDef.schema.read, rawBuf, payloadStart)
+				if not success then
+					warn(`[Burn] Malformed packet '{packetDef.name}' (id {packetId}) from {player.Name}: {res1}`)
+					offset = nextOffset
+					continue
+				end
+
+				const data = res1
+				const readEndOffset = res2
 				if typeof(readEndOffset) == "number" and readEndOffset ~= nextOffset then
-					break
+					warn(
+						`[Burn] Packet '{packetDef.name}' payload desync from {player.Name}: read end {readEndOffset}, expected {nextOffset}`
+					)
+					offset = nextOffset
+					continue
 				end
 
 				while current ~= nil do

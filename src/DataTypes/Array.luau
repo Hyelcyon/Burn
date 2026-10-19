@@ -10,11 +10,15 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeD
 	const elemWrite = elementDescriptor.write
 	const elemRead = elementDescriptor.read
 	const elemSkip = elementDescriptor.skip
+	const elemSize = elementDescriptor.size
 
 	@native
 	const function write(buf: buffer, offset: number, list: { T }): number
 		local currentOffset = offset
 		const count = #list
+		if count > 65535 then
+			error(`[Burn] Array element count {count} exceeds u16 limit (65535)`)
+		end
 		buffer.writeu16(buf, currentOffset, count)
 		currentOffset += 2
 
@@ -27,8 +31,16 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeD
 
 	@native
 	const function read(buf: buffer, offset: number): ({ T }, number)
+		const bufLen = buffer.len(buf)
+		if offset + 2 > bufLen then
+			error(`[Burn] Buffer underflow: cannot read array count at offset {offset} (bufLen {bufLen})`)
+		end
 		const count = buffer.readu16(buf, offset)
 		local currentOffset = offset + 2
+
+		if elemSize ~= nil and currentOffset + count * elemSize > bufLen then
+			error(`[Burn] Buffer underflow: array of {count} fixed elements exceeds buffer size {bufLen}`)
+		end
 
 		const list: { T } = table.create(count)
 		local item: T
@@ -41,7 +53,6 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): Types.TypeD
 	end
 
 	local skip: (buf: buffer, offset: number) -> number
-	const elemSize = elementDescriptor.size
 	if elemSize ~= nil then
 		-- O(1) skip: Fixed-size elements allow calculating the total payload offset without loop traversal.
 		@native

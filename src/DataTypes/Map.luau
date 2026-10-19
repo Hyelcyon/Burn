@@ -26,6 +26,9 @@ const function Map<K, V>(
 
 		for k, v in dict do
 			count += 1
+			if count > 65535 then
+				error(`[Burn] Map entry count exceeds u16 limit (65535)`)
+			end
 			currentOffset = keyWrite(buf, currentOffset, k)
 			currentOffset = valWrite(buf, currentOffset, v)
 		end
@@ -36,6 +39,10 @@ const function Map<K, V>(
 
 	@native
 	const function read(buf: buffer, offset: number): ({ [K]: V }, number)
+		const bufLen = buffer.len(buf)
+		if offset + 2 > bufLen then
+			error(`[Burn] Buffer underflow: cannot read map entry count at offset {offset} (bufLen {bufLen})`)
+		end
 		const count = buffer.readu16(buf, offset)
 		local currentOffset = offset + 2
 

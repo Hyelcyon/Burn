@@ -53,7 +53,21 @@ const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
 		if current ~= nil then
 			const packetDef = packetsById[packetId]
 			if packetDef ~= nil and packetDef.packetType == expectedType then
-				const data, readEndOffset = packetDef.schema.read(rawBuf, payloadStart)
+				const fixedSize = packetDef.schema.size
+				if typeof(fixedSize) == "number" and payloadLen ~= fixedSize then
+					break
+				end
+
+				local success: boolean, res1: unknown, res2: unknown =
+					pcall(packetDef.schema.read, rawBuf, payloadStart)
+				if not success then
+					warn(`[Burn] Failed to decode incoming packet '{packetDef.name}' (id {packetId}): {res1}`)
+					break
+				end
+
+				const data = res1
+				const readEndOffset = res2
+
 				-- Deserializer must consume exactly the advertised payload bytes.
 				-- Any discrepancy indicates stream corruption or schema drift; abort batch to prevent desync.
 				if typeof(readEndOffset) == "number" and readEndOffset ~= nextOffset then
