@@ -118,7 +118,7 @@ end
 ]=]
 @native
 function Cursor.remaining(self: Cursor): number
-	return buffer.len(self.raw) - self.offset
+	return math.max(0, buffer.len(self.raw) - self.offset)
 end
 
 --[=[

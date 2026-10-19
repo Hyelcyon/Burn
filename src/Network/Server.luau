@@ -64,7 +64,7 @@ const function checkRateLimit(player: Player, size: number): boolean
 	end
 
 	const now = os.clock()
-	const elapsed = now - limit.lastTime
+	const elapsed = math.max(0, now - limit.lastTime)
 	limit.currentBytes = math.min(
 		limit.currentBytes + (elapsed * Constants.RATE_LIMIT_BYTES_PER_SEC),
 		Constants.RATE_LIMIT_BYTES_PER_SEC
