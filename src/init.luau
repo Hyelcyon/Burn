@@ -107,6 +107,10 @@ const function wait<T>(packet: Types.PacketDefinition<T>)
 	end
 end
 
+const function isPacketDefinition(value: unknown): boolean
+	return typeof(value) == "table" and (value :: any).id ~= nil and (value :: any).packetType ~= nil
+end
+
 --[=[
 	Enqueues a packet into the outgoing priority queue for frame-batched transmission on Heartbeat.
 ]=]
@@ -116,13 +120,21 @@ const function send<T>(
 	maybeData: T?
 )
 	if isServer then
-		if maybeData ~= nil then
-			Network.Server.send(target :: Player | { Player }, packetOrData :: Types.PacketDefinition<T>, maybeData)
-		else
+		if isPacketDefinition(target) then
 			Network.Server.broadcast(target :: Types.PacketDefinition<T>, packetOrData :: T)
+		else
+			Network.Server.send(
+				target :: Player | { Player },
+				packetOrData :: Types.PacketDefinition<T>,
+				maybeData :: T
+			)
 		end
 	else
-		Network.Client.send(target :: Types.PacketDefinition<T>, packetOrData :: T)
+		if isPacketDefinition(target) then
+			Network.Client.send(target :: Types.PacketDefinition<T>, packetOrData :: T)
+		else
+			Network.Client.send(packetOrData :: Types.PacketDefinition<T>, maybeData :: T)
+		end
 	end
 end
 
@@ -135,17 +147,21 @@ const function sendImmediate<T>(
 	maybeData: T?
 )
 	if isServer then
-		if maybeData ~= nil then
+		if isPacketDefinition(target) then
+			Network.Server.broadcastImmediate(target :: Types.PacketDefinition<T>, packetOrData :: T)
+		else
 			Network.Server.sendImmediate(
 				target :: Player | { Player },
 				packetOrData :: Types.PacketDefinition<T>,
-				maybeData
+				maybeData :: T
 			)
-		else
-			Network.Server.broadcastImmediate(target :: Types.PacketDefinition<T>, packetOrData :: T)
 		end
 	else
-		Network.Client.sendImmediate(target :: Types.PacketDefinition<T>, packetOrData :: T)
+		if isPacketDefinition(target) then
+			Network.Client.sendImmediate(target :: Types.PacketDefinition<T>, packetOrData :: T)
+		else
+			Network.Client.sendImmediate(packetOrData :: Types.PacketDefinition<T>, maybeData :: T)
+		end
 	end
 end
 
@@ -209,8 +225,34 @@ const function definePacket<T>(
 	optionsOrId: (number | PacketOptions)?,
 	maybePriority: Types.PacketPriority?
 ): Types.PacketDefinition<T>
+	Packet.Definition.setNetworkBindings({
+		send = send,
+		sendImmediate = sendImmediate,
+		broadcast = broadcast,
+		broadcastExcept = broadcastExcept,
+		broadcastImmediate = broadcastImmediate,
+		on = on,
+		once = once,
+		wait = wait,
+		invoke = invoke,
+		handleRequest = handleRequest,
+	})
+
 	return Packet.Registry.register(name, packetType, schema, optionsOrId, maybePriority)
 end
+
+Packet.Definition.setNetworkBindings({
+	send = send,
+	sendImmediate = sendImmediate,
+	broadcast = broadcast,
+	broadcastExcept = broadcastExcept,
+	broadcastImmediate = broadcastImmediate,
+	on = on,
+	once = once,
+	wait = wait,
+	invoke = invoke,
+	handleRequest = handleRequest,
+})
 
 const Burn = table.freeze({
 	Types = DataTypes,
@@ -267,6 +309,12 @@ const Burn = table.freeze({
 	varint = DataTypes.varint :: Types.TypeDescriptor<number>,
 	VarInt = DataTypes.VarInt,
 	color2 = DataTypes.color2 :: Types.TypeDescriptor<Color3>,
+	vector2 = DataTypes.vector2 :: Types.TypeDescriptor<Vector2>,
+	vector3 = DataTypes.vector3 :: Types.TypeDescriptor<Vector3>,
+	color3 = DataTypes.color3 :: Types.TypeDescriptor<Color3>,
+	cframe = DataTypes.cframe :: Types.TypeDescriptor<CFrame>,
+	enumItem = DataTypes.enumItem,
+	instance = DataTypes.instance :: Types.TypeDescriptor<Instance?>,
 	struct = DataTypes.struct,
 	array = DataTypes.array,
 	map = DataTypes.map,

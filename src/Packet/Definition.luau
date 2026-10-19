@@ -6,6 +6,21 @@ export type PacketType = Types.PacketType
 export type PacketPriority = Types.PacketPriority
 export type PacketDefinition<T> = Types.PacketDefinition<T>
 
+export type NetworkBindings = {
+	send: (targetOrPacket: any, packetOrData: any, maybeData: any?) -> (),
+	sendImmediate: (targetOrPacket: any, packetOrData: any, maybeData: any?) -> (),
+	broadcast: (packet: any, data: any) -> (),
+	broadcastExcept: (excludedPlayer: Player, packet: any, data: any) -> (),
+	broadcastImmediate: (packet: any, data: any) -> (),
+	on: (packet: any, listener: any) -> Types.Connection,
+	once: (packet: any, listener: any) -> Types.Connection,
+	wait: (packet: any) -> ...any,
+	invoke: (packet: any, responseSchema: any, data: any) -> any,
+	handleRequest: (packet: any, responseSchema: any, handler: any) -> (),
+}
+
+local networkBindings: NetworkBindings? = nil
+
 -- Maps priority labels to 1-based buffer queue indices (1=Low, 2=Medium, 3=High, 4=Max).
 -- Queues are drained in descending index order (4 down to 1) when flushing batched frames.
 const function priorityToIndex(priority: PacketPriority?): (PacketPriority, number)
@@ -18,6 +33,96 @@ const function priorityToIndex(priority: PacketPriority?): (PacketPriority, numb
 	else
 		return "Medium", 2
 	end
+end
+
+const function isPlayerOrPlayerList(val: any): boolean
+	if typeof(val) == "Instance" then
+		return (val :: any):IsA("Player")
+	elseif typeof(val) == "table" then
+		return (val :: any).id == nil
+	end
+	return false
+end
+
+local PacketMethods = {}
+PacketMethods.__index = PacketMethods
+
+function PacketMethods.send(self: any, arg1: any, arg2: any)
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	if arg2 ~= nil or isPlayerOrPlayerList(arg1) then
+		networkBindings.send(arg1, self, arg2)
+	else
+		networkBindings.send(self, arg1)
+	end
+end
+
+function PacketMethods.sendImmediate(self: any, arg1: any, arg2: any)
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	if arg2 ~= nil or isPlayerOrPlayerList(arg1) then
+		networkBindings.sendImmediate(arg1, self, arg2)
+	else
+		networkBindings.sendImmediate(self, arg1)
+	end
+end
+
+function PacketMethods.broadcast(self: any, data: any)
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	networkBindings.broadcast(self, data)
+end
+
+function PacketMethods.broadcastExcept(self: any, excludedPlayer: Player, data: any)
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	networkBindings.broadcastExcept(excludedPlayer, self, data)
+end
+
+function PacketMethods.broadcastImmediate(self: any, data: any)
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	networkBindings.broadcastImmediate(self, data)
+end
+
+function PacketMethods.on(self: any, listener: any): Types.Connection
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	return networkBindings.on(self, listener)
+end
+
+function PacketMethods.once(self: any, listener: any): Types.Connection
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	return networkBindings.once(self, listener)
+end
+
+function PacketMethods.wait(self: any): ...any
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	return networkBindings.wait(self)
+end
+
+function PacketMethods.invoke(self: any, responseSchema: any, data: any): any
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	return networkBindings.invoke(self, responseSchema, data)
+end
+
+function PacketMethods.handleRequest(self: any, responseSchema: any, handler: any)
+	if networkBindings == nil then
+		error("[Burn] Network bindings not initialized; require Burn root first")
+	end
+	networkBindings.handleRequest(self, responseSchema, handler)
 end
 
 --[=[
@@ -48,14 +153,19 @@ const function definePacket<T>(
 
 	const resolvedPriority, priorityIndex = priorityToIndex(priority)
 
-	return table.freeze({
+	return table.freeze(setmetatable({
 		id = id,
 		name = name,
 		packetType = resolvedPacketType,
 		priority = resolvedPriority,
 		priorityIndex = priorityIndex,
 		schema = schema,
-	})
+	}, PacketMethods)) :: any
 end
 
-return definePacket
+const ExportDefinition = definePacket :: any
+ExportDefinition.setNetworkBindings = function(bindings: NetworkBindings)
+	networkBindings = bindings
+end
+
+return ExportDefinition

@@ -156,29 +156,32 @@ function Client.on<T>(packetDef: Types.PacketDefinition<T>, listener: (T) -> ())
 
 	ensureListening()
 
+	const function disconnectFn(_self: Connection)
+		if not node.connected then
+			return
+		end
+		node.connected = false
+
+		if node.prev ~= nil then
+			node.prev.next = node.next
+		else
+			listenerHeads[packetId] = node.next
+		end
+
+		if node.next ~= nil then
+			node.next.prev = node.prev
+		else
+			listenerTails[packetId] = node.prev
+		end
+
+		node.prev = nil
+		node.next = nil
+		node.callback = nil :: any
+	end
+
 	return {
-		disconnect = function(_self: Connection)
-			if not node.connected then
-				return
-			end
-			node.connected = false
-
-			if node.prev ~= nil then
-				node.prev.next = node.next
-			else
-				listenerHeads[packetId] = node.next
-			end
-
-			if node.next ~= nil then
-				node.next.prev = node.prev
-			else
-				listenerTails[packetId] = node.prev
-			end
-
-			node.prev = nil
-			node.next = nil
-			node.callback = nil :: any
-		end,
+		disconnect = disconnectFn,
+		Disconnect = disconnectFn,
 	}
 end
 

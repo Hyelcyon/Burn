@@ -71,6 +71,17 @@ export type PacketDefinition<T> = {
 	read priority: PacketPriority,
 	read priorityIndex: number,
 	read schema: TypeDescriptor<T>,
+
+	read send: (self: PacketDefinition<T>, targetOrData: any, maybeData: any?) -> (),
+	read sendImmediate: (self: PacketDefinition<T>, targetOrData: any, maybeData: any?) -> (),
+	read broadcast: (self: PacketDefinition<T>, data: T) -> (),
+	read broadcastExcept: (self: PacketDefinition<T>, excludedPlayer: Player, data: T) -> (),
+	read broadcastImmediate: (self: PacketDefinition<T>, data: T) -> (),
+	read on: (self: PacketDefinition<T>, listener: any) -> Connection,
+	read once: (self: PacketDefinition<T>, listener: any) -> Connection,
+	read wait: (self: PacketDefinition<T>) -> ...any,
+	read invoke: (self: PacketDefinition<T>, responseSchema: any, data: T) -> any,
+	read handleRequest: (self: PacketDefinition<T>, responseSchema: any, handler: any) -> (),
 }
 
 export type AnyPacketDefinition = {
@@ -80,6 +91,17 @@ export type AnyPacketDefinition = {
 	read priority: PacketPriority,
 	read priorityIndex: number,
 	read schema: AnyTypeDescriptor,
+
+	read send: (self: AnyPacketDefinition, ...any) -> (),
+	read sendImmediate: (self: AnyPacketDefinition, ...any) -> (),
+	read broadcast: (self: AnyPacketDefinition, data: any) -> (),
+	read broadcastExcept: (self: AnyPacketDefinition, excludedPlayer: Player, data: any) -> (),
+	read broadcastImmediate: (self: AnyPacketDefinition, data: any) -> (),
+	read on: (self: AnyPacketDefinition, listener: any) -> Connection,
+	read once: (self: AnyPacketDefinition, listener: any) -> Connection,
+	read wait: (self: AnyPacketDefinition) -> ...any,
+	read invoke: (self: AnyPacketDefinition, responseSchema: any, data: any) -> any,
+	read handleRequest: (self: AnyPacketDefinition, responseSchema: any, handler: any) -> (),
 }
 
 export type ErasedPacketDefinition = AnyPacketDefinition
@@ -88,9 +110,11 @@ export type ErasedPacketDefinition = AnyPacketDefinition
 	@interface Connection
 	@within Burn
 	.disconnect (self: Connection) -> () -- Unregisters the listener callback.
+	.Disconnect (self: Connection) -> () -- PascalCase alias conforming to Roblox convention.
 ]=]
 export type Connection = {
 	disconnect: (self: Connection) -> (),
+	Disconnect: (self: Connection) -> (),
 }
 
 export type NetworkContext = {

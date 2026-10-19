@@ -10,9 +10,13 @@ export type ByteBuffer = {
 	raw: buffer,
 	capacity: number,
 	size: number,
+	ensureCapacity: (self: ByteBuffer, required: number) -> (),
+	reset: (self: ByteBuffer) -> (),
+	compact: (self: ByteBuffer) -> buffer,
 }
 
 const ByteBuffer = {}
+ByteBuffer.__index = ByteBuffer
 
 --[=[
 	Creates a new ByteBuffer with the specified initial capacity.
@@ -20,11 +24,11 @@ const ByteBuffer = {}
 @native
 function ByteBuffer.create(initialCapacity: number?): ByteBuffer
 	const capacity = if typeof(initialCapacity) == "number" then initialCapacity else Constants.DEFAULT_BUFFER_CAPACITY
-	return {
+	return setmetatable({
 		raw = buffer.create(capacity),
 		capacity = capacity,
 		size = 0,
-	}
+	}, ByteBuffer) :: any
 end
 
 --[=[

@@ -9,19 +9,34 @@ const Types = require("@src/Types")
 export type Cursor = {
 	raw: buffer,
 	offset: number,
+	readU8: (self: Cursor) -> number,
+	readU16: (self: Cursor) -> number,
+	readU32: (self: Cursor) -> number,
+	readI8: (self: Cursor) -> number,
+	readI16: (self: Cursor) -> number,
+	readI32: (self: Cursor) -> number,
+	readF32: (self: Cursor) -> number,
+	readF64: (self: Cursor) -> number,
+	readString: (self: Cursor, count: number) -> string,
+	skip: (self: Cursor, count: number) -> (),
+	skipType: <T>(self: Cursor, descriptor: Types.TypeDescriptor<T>) -> (),
+	readType: <T>(self: Cursor, descriptor: Types.TypeDescriptor<T>) -> T,
+	remaining: (self: Cursor) -> number,
+	isEOF: (self: Cursor) -> boolean,
 }
 
 const Cursor = {}
+Cursor.__index = Cursor
 
 --[=[
 	Wraps a buffer into a Cursor starting at `initialOffset` (defaults to 0).
 ]=]
 @native
 function Cursor.new(raw: buffer, initialOffset: number?): Cursor
-	return {
+	return setmetatable({
 		raw = raw,
 		offset = initialOffset or 0,
-	}
+	}, Cursor) :: any
 end
 
 @native

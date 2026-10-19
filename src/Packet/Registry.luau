@@ -27,7 +27,7 @@ function Registry.register<T>(
 	name: string,
 	packetType: Types.PacketType,
 	schema: Types.TypeDescriptor<T>,
-	optionsOrId: (number | PacketOptions)?,
+	optionsOrId: (number | PacketOptions | Types.PacketPriority)?,
 	maybePriority: Types.PacketPriority?
 ): Types.PacketDefinition<T>
 	assert(packetsByName[name] == nil, `Packet '{name}' is already registered`)
@@ -42,6 +42,8 @@ function Registry.register<T>(
 		end
 	elseif typeof(optionsOrId) == "number" then
 		explicitId = optionsOrId
+	elseif typeof(optionsOrId) == "string" then
+		priority = optionsOrId :: Types.PacketPriority
 	end
 
 	local id: number
