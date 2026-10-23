@@ -167,9 +167,14 @@ end
 
 -- Invariant: Attaching helper functions to callable constructors requires boundary casting in Luau --!strict
 -- as function and table types cannot intersect without type incompatibility.
-const ExportDefinition = definePacket :: any
-ExportDefinition.setNetworkBindings = function(bindings: NetworkBindings)
-	networkBindings = bindings
-end
+local ExportDefinition = setmetatable({
+	setNetworkBindings = function(bindings: NetworkBindings)
+		networkBindings = bindings
+	end,
+}, {
+	__call = function(_self, ...)
+		return definePacket(...)
+	end,
+}) :: any
 
 return ExportDefinition
