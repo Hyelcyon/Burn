@@ -2,11 +2,7 @@
 
 const Types = require("@src/Types")
 
-export type EnumType<E> = {
-	GetEnumItems: (self: unknown) -> { E },
-}
-
-export type EnumDescriptor<E> = Types.TypeDescriptor<E>
+export type EnumDescriptor<E = EnumItem> = Types.TypeDescriptor<E>
 
 @native
 const function skip(_buf: buffer, offset: number): number
@@ -18,20 +14,20 @@ end
 	Creates an EnumItem TypeDescriptor that serializes the integer `.Value` as a 2-byte (u16) integer,
 	resolving back to the EnumItem on read using a pre-indexed value lookup table.
 ]=]
-const function createEnumItemDescriptor<E>(enumType: EnumType<E> | Enum): Types.TypeDescriptor<E>
-	const itemsByValue: { [number]: E } = {}
-	for _, item in (enumType :: { GetEnumItems: (unknown) -> { E } }):GetEnumItems() do
-		itemsByValue[(item :: EnumItem).Value] = item
+const function createEnumItemDescriptor(enumType: Enum): Types.TypeDescriptor<EnumItem>
+	const itemsByValue: { [number]: EnumItem } = {}
+	for _, item in enumType:GetEnumItems() do
+		itemsByValue[(item :: EnumItem).Value] = item :: EnumItem
 	end
 
 	@native
-	const function write(buf: buffer, offset: number, value: E): number
-		buffer.writeu16(buf, offset, (value :: EnumItem).Value)
+	const function write(buf: buffer, offset: number, value: EnumItem): number
+		buffer.writeu16(buf, offset, value.Value)
 		return offset + 2
 	end
 
 	@native
-	const function read(buf: buffer, offset: number): (E, number)
+	const function read(buf: buffer, offset: number): (EnumItem, number)
 		const bufLen = buffer.len(buf)
 		if offset + 2 > bufLen then
 			error(`[Burn] Buffer underflow: cannot read EnumItem at offset {offset} (bufLen {bufLen})`)

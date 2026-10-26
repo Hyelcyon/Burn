@@ -269,7 +269,7 @@ const Burn = table.freeze({
 	Color3 = DataTypes.Color3 :: Types.TypeDescriptor<Color3>,
 	CFrame = DataTypes.CFrame :: Types.TypeDescriptor<CFrame>,
 	EnumItem = DataTypes.EnumItem,
-	Instance = DataTypes.Instance :: Types.TypeDescriptor<Instance?>,
+	Instance = DataTypes.Instance :: InstanceDescriptor<Instance?>,
 
 	Struct = DataTypes.Struct,
 	Array = DataTypes.Array,
@@ -303,7 +303,7 @@ const Burn = table.freeze({
 	color3 = DataTypes.color3 :: Types.TypeDescriptor<Color3>,
 	cframe = DataTypes.cframe :: Types.TypeDescriptor<CFrame>,
 	enumItem = DataTypes.enumItem,
-	instance = DataTypes.instance :: Types.TypeDescriptor<Instance?>,
+	instance = DataTypes.instance :: InstanceDescriptor<Instance?>,
 	struct = DataTypes.struct,
 	array = DataTypes.array,
 	map = DataTypes.map,

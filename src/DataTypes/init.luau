@@ -71,7 +71,7 @@ const DataTypes = table.freeze({
 	Color3 = Color3 :: Types.TypeDescriptor<Color3>,
 	CFrame = CFrame :: Types.TypeDescriptor<CFrame>,
 	EnumItem = EnumItem,
-	Instance = Instance :: Types.TypeDescriptor<Instance?>,
+	Instance = Instance :: InstanceDescriptor<Instance?>,
 
 	Struct = Struct,
 	Array = Array,
@@ -105,7 +105,7 @@ const DataTypes = table.freeze({
 	color3 = Color3 :: Types.TypeDescriptor<Color3>,
 	cframe = CFrame :: Types.TypeDescriptor<CFrame>,
 	enumItem = EnumItem,
-	instance = Instance :: Types.TypeDescriptor<Instance?>,
+	instance = Instance :: InstanceDescriptor<Instance?>,
 	struct = Struct,
 	array = Array,
 	map = Map,

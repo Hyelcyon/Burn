@@ -7,18 +7,21 @@ export type PacketPriority = Types.PacketPriority
 export type PacketDefinition<T> = Types.PacketDefinition<T>
 
 -- Invariant: NetworkBindings decouples PacketDefinition from Burn root to avoid circular dependency.
--- Dynamic parameter signatures use boundary types to accept generic root dispatchers without contravariant solver errors.
+-- A localized dynamic function signature is required at this dependency inversion boundary because Luau enforces
+-- contravariant generic parameter validation, which causes type solver recursion when passing generic root dispatchers.
+type DynamicFunction = (...any) -> ...any
+
 export type NetworkBindings = {
-	send: (targetOrPacket: any, packetOrData: any, maybeData: any?) -> (),
-	sendImmediate: (targetOrPacket: any, packetOrData: any, maybeData: any?) -> (),
-	broadcast: (packet: any, data: any) -> (),
-	broadcastExcept: (excludedPlayer: Player, packet: any, data: any) -> (),
-	broadcastImmediate: (packet: any, data: any) -> (),
-	on: (packet: any, listener: any) -> Types.Connection,
-	once: (packet: any, listener: any) -> Types.Connection,
-	wait: (packet: any) -> ...any,
-	invoke: (packet: any, responseSchema: any, data: any) -> any,
-	handleRequest: (packet: any, responseSchema: any, handler: any) -> (),
+	read send: DynamicFunction,
+	read sendImmediate: DynamicFunction,
+	read broadcast: DynamicFunction,
+	read broadcastExcept: DynamicFunction,
+	read broadcastImmediate: DynamicFunction,
+	read on: DynamicFunction,
+	read once: DynamicFunction,
+	read wait: DynamicFunction,
+	read invoke: DynamicFunction,
+	read handleRequest: DynamicFunction,
 }
 
 local networkBindings: NetworkBindings? = nil
@@ -49,7 +52,7 @@ end
 local PacketMethods = {}
 PacketMethods.__index = PacketMethods
 
-function PacketMethods.send(self: Types.AnyPacketDefinition, arg1: any, arg2: any?)
+function PacketMethods.send<T>(self: Types.PacketDefinition<T>, arg1: Player | { Player } | T, arg2: T?)
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
@@ -60,7 +63,7 @@ function PacketMethods.send(self: Types.AnyPacketDefinition, arg1: any, arg2: an
 	end
 end
 
-function PacketMethods.sendImmediate(self: Types.AnyPacketDefinition, arg1: any, arg2: any?)
+function PacketMethods.sendImmediate<T>(self: Types.PacketDefinition<T>, arg1: Player | { Player } | T, arg2: T?)
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
@@ -71,56 +74,66 @@ function PacketMethods.sendImmediate(self: Types.AnyPacketDefinition, arg1: any,
 	end
 end
 
-function PacketMethods.broadcast(self: Types.AnyPacketDefinition, data: any)
+function PacketMethods.broadcast<T>(self: Types.PacketDefinition<T>, data: T)
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	networkBindings.broadcast(self, data)
 end
 
-function PacketMethods.broadcastExcept(self: Types.AnyPacketDefinition, excludedPlayer: Player, data: any)
+function PacketMethods.broadcastExcept<T>(self: Types.PacketDefinition<T>, excludedPlayer: Player, data: T)
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	networkBindings.broadcastExcept(excludedPlayer, self, data)
 end
 
-function PacketMethods.broadcastImmediate(self: Types.AnyPacketDefinition, data: any)
+function PacketMethods.broadcastImmediate<T>(self: Types.PacketDefinition<T>, data: T)
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	networkBindings.broadcastImmediate(self, data)
 end
 
-function PacketMethods.on(self: Types.AnyPacketDefinition, listener: any): Types.Connection
+function PacketMethods.on<T>(
+	self: Types.PacketDefinition<T>,
+	listener: ((T) -> ()) | ((Player, T) -> ())
+): Types.Connection
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	return networkBindings.on(self, listener)
 end
 
-function PacketMethods.once(self: Types.AnyPacketDefinition, listener: any): Types.Connection
+function PacketMethods.once<T>(
+	self: Types.PacketDefinition<T>,
+	listener: ((T) -> ()) | ((Player, T) -> ())
+): Types.Connection
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	return networkBindings.once(self, listener)
 end
 
-function PacketMethods.wait(self: Types.AnyPacketDefinition): ...any
+function PacketMethods.wait<T>(self: Types.PacketDefinition<T>): (Player?, T)
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	return networkBindings.wait(self)
 end
 
-function PacketMethods.invoke(self: Types.AnyPacketDefinition, responseSchema: any, data: any): any
+function PacketMethods.invoke<T, Res>(self: Types.PacketDefinition<T>, responseSchema: Types.TypeDescriptor<Res>, data: T): Res?
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	return networkBindings.invoke(self, responseSchema, data)
 end
 
-function PacketMethods.handleRequest(self: Types.AnyPacketDefinition, responseSchema: any, handler: any)
+function PacketMethods.handleRequest<T, Res>(
+	self: Types.PacketDefinition<T>,
+	responseSchema: Types.TypeDescriptor<Res>,
+	handler: (Player, T) -> Res
+)
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
@@ -172,14 +185,14 @@ local ExportDefinition = setmetatable({
 		networkBindings = bindings
 	end,
 }, {
-	__call = function(
-		_self,
+	__call = function<T>(
+		_self: unknown,
 		id: number,
 		name: string,
 		packetType: PacketType,
-		schema: Types.TypeDescriptor<any>,
+		schema: Types.TypeDescriptor<T>,
 		priority: PacketPriority?
-	)
+	): PacketDefinition<T>
 		return definePacket(id, name, packetType, schema, priority)
 	end,
 })
