@@ -198,20 +198,37 @@ function Client.invoke<Req, Res>(
 		error(`Client.invoke requires a packet with packetType == 'Request' (got '{packetDef.packetType}')`)
 	end
 
-	const scratch = ByteBuffer.getScratch()
+	local reqBuf: buffer
 	const schemaSize = packetDef.schema.size
-	const capacity = if typeof(schemaSize) == "number" then schemaSize else Constants.MAX_PACKET_SIZE
-	ByteBuffer.ensureCapacity(scratch, capacity)
-	const reqLen = packetDef.schema.write(scratch.raw, 0, data)
-	if reqLen < 0 or reqLen > Constants.MAX_PAYLOAD_SIZE then
-		error(`Request payload ({reqLen} bytes) exceeds limit ({Constants.MAX_PAYLOAD_SIZE} bytes)`)
-	end
+	if typeof(schemaSize) == "number" then
+		-- Fast path: Known fixed schema size allows zero-copy serialization directly into wire buffer.
+		if schemaSize > Constants.MAX_PAYLOAD_SIZE then
+			error(`Request payload ({schemaSize} bytes) exceeds limit ({Constants.MAX_PAYLOAD_SIZE} bytes)`)
+		end
+		reqBuf = buffer.create(Constants.HEADER_SIZE + schemaSize)
+		buffer.writeu8(reqBuf, 0, packetDef.id)
+		buffer.writeu16(reqBuf, 1, schemaSize)
+		const writtenEnd = packetDef.schema.write(reqBuf, Constants.HEADER_SIZE, data)
+		if writtenEnd ~= Constants.HEADER_SIZE + schemaSize then
+			error(
+				`[Burn] Fixed-size schema '{packetDef.name}' wrote {writtenEnd - Constants.HEADER_SIZE} bytes, expected {schemaSize}`
+			)
+		end
+	else
+		-- Dynamic path: Serialize into reusable thread-local scratch buffer first, then copy exact payload.
+		const scratch = ByteBuffer.getScratch()
+		ByteBuffer.ensureCapacity(scratch, Constants.MAX_PACKET_SIZE)
+		const reqLen = packetDef.schema.write(scratch.raw, 0, data)
+		if reqLen < 0 or reqLen > Constants.MAX_PAYLOAD_SIZE then
+			error(`Request payload ({reqLen} bytes) exceeds limit ({Constants.MAX_PAYLOAD_SIZE} bytes)`)
+		end
 
-	const reqBuf = buffer.create(Constants.HEADER_SIZE + reqLen)
-	buffer.writeu8(reqBuf, 0, packetDef.id)
-	buffer.writeu16(reqBuf, 1, reqLen)
-	if reqLen > 0 then
-		buffer.copy(reqBuf, Constants.HEADER_SIZE, scratch.raw, 0, reqLen)
+		reqBuf = buffer.create(Constants.HEADER_SIZE + reqLen)
+		buffer.writeu8(reqBuf, 0, packetDef.id)
+		buffer.writeu16(reqBuf, 1, reqLen)
+		if reqLen > 0 then
+			buffer.copy(reqBuf, Constants.HEADER_SIZE, scratch.raw, 0, reqLen)
+		end
 	end
 
 	const invokeOk, resBuf = pcall(function()

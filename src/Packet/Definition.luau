@@ -172,9 +172,16 @@ local ExportDefinition = setmetatable({
 		networkBindings = bindings
 	end,
 }, {
-	__call = function(_self, ...)
-		return definePacket(...)
+	__call = function(
+		_self,
+		id: number,
+		name: string,
+		packetType: PacketType,
+		schema: Types.TypeDescriptor<any>,
+		priority: PacketPriority?
+	)
+		return definePacket(id, name, packetType, schema, priority)
 	end,
-}) :: any
+})
 
 return ExportDefinition

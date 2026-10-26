@@ -25,11 +25,7 @@ const function read(buf: buffer, offset: number): (Instance?, number)
 end
 
 @native
-const function skip(buf: buffer, offset: number): number
-	const bufLen = buffer.len(buf)
-	if offset + 2 > bufLen then
-		error(`[Burn] Buffer underflow: cannot skip Instance reference at offset {offset} (bufLen {bufLen})`)
-	end
+const function skip(_buf: buffer, offset: number): number
 	return offset + 2
 end
 

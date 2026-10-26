@@ -22,7 +22,7 @@ const function read(buf: buffer, offset: number): (number, number)
 	end
 	const low = buffer.readu16(buf, offset)
 	const high = buffer.readu8(buf, offset + 2)
-	return low + high * 65536, offset + 3
+	return bit32.bor(low, bit32.lshift(high, 16)), offset + 3
 end
 
 @native

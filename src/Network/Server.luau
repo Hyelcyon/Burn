@@ -259,27 +259,43 @@ const function ensureListening()
 			return nil
 		end
 
-		const scratch = ByteBuffer.getScratch()
 		const resSize = resSchema.size
-		const capacity = if typeof(resSize) == "number" then resSize else Constants.MAX_PACKET_SIZE
-		ByteBuffer.ensureCapacity(scratch, capacity)
-
+		local out: buffer
 		const writeFn = resSchema.write :: (buf: buffer, offset: number, value: unknown) -> number
-		const writeOk, resLenOrErr = pcall(writeFn, scratch.raw, 0, resData)
-		if not writeOk then
-			return nil
-		end
 
-		const resLen = resLenOrErr :: number
-		if resLen < 0 or resLen > Constants.MAX_PAYLOAD_SIZE then
-			return nil
-		end
+		if typeof(resSize) == "number" then
+			-- Fast path: Known fixed response size allows direct zero-copy write into wire buffer.
+			if resSize > Constants.MAX_PAYLOAD_SIZE then
+				return nil
+			end
+			out = buffer.create(Constants.HEADER_SIZE + resSize)
+			buffer.writeu8(out, 0, packetId)
+			buffer.writeu16(out, 1, resSize)
+			const writeOk, endOffsetOrErr = pcall(writeFn, out, Constants.HEADER_SIZE, resData)
+			if not writeOk or endOffsetOrErr ~= Constants.HEADER_SIZE + resSize then
+				return nil
+			end
+		else
+			-- Dynamic path: Serialize into reusable thread-local scratch buffer first, then copy exact payload.
+			const scratch = ByteBuffer.getScratch()
+			ByteBuffer.ensureCapacity(scratch, Constants.MAX_PACKET_SIZE)
 
-		const out = buffer.create(Constants.HEADER_SIZE + resLen)
-		buffer.writeu8(out, 0, packetId)
-		buffer.writeu16(out, 1, resLen)
-		if resLen > 0 then
-			buffer.copy(out, Constants.HEADER_SIZE, scratch.raw, 0, resLen)
+			const writeOk, resLenOrErr = pcall(writeFn, scratch.raw, 0, resData)
+			if not writeOk then
+				return nil
+			end
+
+			const resLen = resLenOrErr :: number
+			if resLen < 0 or resLen > Constants.MAX_PAYLOAD_SIZE then
+				return nil
+			end
+
+			out = buffer.create(Constants.HEADER_SIZE + resLen)
+			buffer.writeu8(out, 0, packetId)
+			buffer.writeu16(out, 1, resLen)
+			if resLen > 0 then
+				buffer.copy(out, Constants.HEADER_SIZE, scratch.raw, 0, resLen)
+			end
 		end
 
 		return out

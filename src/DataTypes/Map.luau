@@ -48,11 +48,14 @@ const function Map<K, V>(
 		const count = buffer.readu16(buf, offset)
 		local currentOffset = offset + 2
 
+		-- Trust boundary: Every key-value pair consumes at least 2 bytes (>= 1 byte key, >= 1 byte value).
 		if keyDescriptor.size ~= nil and valueDescriptor.size ~= nil then
 			const fixedEntrySize = keyDescriptor.size + valueDescriptor.size
 			if currentOffset + count * fixedEntrySize > bufLen then
 				error(`[Burn] Buffer underflow: map of {count} fixed entries exceeds buffer size {bufLen}`)
 			end
+		elseif currentOffset + count * 2 > bufLen then
+			error(`[Burn] Buffer underflow: map of {count} dynamic entries exceeds buffer size {bufLen}`)
 		end
 
 		const dict: { [K]: V } = {}
@@ -94,6 +97,11 @@ const function Map<K, V>(
 			end
 			const count = buffer.readu16(buf, offset)
 			local currentOffset = offset + 2
+
+			-- Minimum physical footprint: each map entry consumes >= 2 bytes.
+			if currentOffset + count * 2 > bufLen then
+				error(`[Burn] Buffer underflow: map of {count} dynamic entries exceeds buffer size {bufLen}`)
+			end
 
 			for _ = 1, count do
 				currentOffset = keySkip(buf, currentOffset)

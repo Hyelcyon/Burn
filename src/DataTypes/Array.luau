@@ -40,8 +40,14 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): ArrayDescri
 		const count = buffer.readu16(buf, offset)
 		local currentOffset = offset + 2
 
-		if elemSize ~= nil and currentOffset + count * elemSize > bufLen then
-			error(`[Burn] Buffer underflow: array of {count} fixed elements exceeds buffer size {bufLen}`)
+		-- Trust boundary: Validate minimum physical byte requirement before table.create(count)
+		-- to prevent allocation DoS attacks from crafted frames claiming high element counts.
+		if elemSize ~= nil then
+			if currentOffset + count * elemSize > bufLen then
+				error(`[Burn] Buffer underflow: array of {count} fixed elements exceeds buffer size {bufLen}`)
+			end
+		elseif currentOffset + count > bufLen then
+			error(`[Burn] Buffer underflow: array of {count} dynamic elements exceeds buffer size {bufLen}`)
 		end
 
 		const list: { T } = table.create(count)
@@ -80,6 +86,11 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): ArrayDescri
 			end
 			const count = buffer.readu16(buf, offset)
 			local currentOffset = offset + 2
+
+			-- Minimum physical footprint: each dynamic element consumes >= 1 byte.
+			if currentOffset + count > bufLen then
+				error(`[Burn] Buffer underflow: array of {count} dynamic elements exceeds buffer size {bufLen}`)
+			end
 
 			for _ = 1, count do
 				currentOffset = elemSkip(buf, currentOffset)

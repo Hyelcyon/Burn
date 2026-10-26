@@ -224,22 +224,9 @@ const function definePacket<T>(
 	name: string,
 	packetType: Types.PacketType,
 	schema: Types.TypeDescriptor<T>,
-	optionsOrId: (number | PacketOptions)?,
+	optionsOrId: (number | PacketOptions | Types.PacketPriority)?,
 	maybePriority: Types.PacketPriority?
 ): Types.PacketDefinition<T>
-	Packet.Definition.setNetworkBindings({
-		send = send,
-		sendImmediate = sendImmediate,
-		broadcast = broadcast,
-		broadcastExcept = broadcastExcept,
-		broadcastImmediate = broadcastImmediate,
-		on = on,
-		once = once,
-		wait = wait,
-		invoke = invoke,
-		handleRequest = handleRequest,
-	})
-
 	return Packet.Registry.register(name, packetType, schema, optionsOrId, maybePriority)
 end
 

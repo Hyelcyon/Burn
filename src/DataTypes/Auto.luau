@@ -228,6 +228,9 @@ const function read(buf: buffer, offset: number): (unknown, number)
 		return color3.read(buf, offset + 1)
 	elseif tagType == TAG_SHORT_ARRAY then
 		const count = inlineData
+		if offset + 1 + count > bufLen then
+			error(`[Burn] Buffer underflow: short array of {count} items exceeds buffer size {bufLen}`)
+		end
 		const arr = table.create(count)
 		local curr = offset + 1
 		local item: unknown
@@ -241,6 +244,9 @@ const function read(buf: buffer, offset: number): (unknown, number)
 			error(`[Burn] Buffer underflow: cannot read array count at offset {offset + 1} (bufLen {bufLen})`)
 		end
 		const count = buffer.readu16(buf, offset + 1)
+		if offset + 3 + count > bufLen then
+			error(`[Burn] Buffer underflow: long array of {count} items exceeds buffer size {bufLen}`)
+		end
 		const arr = table.create(count)
 		local curr = offset + 3
 		local item: unknown
@@ -254,6 +260,9 @@ const function read(buf: buffer, offset: number): (unknown, number)
 			error(`[Burn] Buffer underflow: cannot read map count at offset {offset + 1} (bufLen {bufLen})`)
 		end
 		const count = buffer.readu16(buf, offset + 1)
+		if offset + 3 + count * 2 > bufLen then
+			error(`[Burn] Buffer underflow: map of {count} entries exceeds buffer size {bufLen}`)
+		end
 		const map: { [unknown]: unknown } = {}
 		local curr = offset + 3
 		local k: unknown
@@ -331,6 +340,9 @@ const function skip(buf: buffer, offset: number): number
 		end
 		return offset + 1 + 3
 	elseif tagType == TAG_SHORT_ARRAY then
+		if offset + 1 + inlineData > bufLen then
+			error(`[Burn] Buffer underflow: short array of {inlineData} items exceeds buffer size {bufLen}`)
+		end
 		local curr = offset + 1
 		for _ = 1, inlineData do
 			curr = skip(buf, curr)
@@ -341,6 +353,9 @@ const function skip(buf: buffer, offset: number): number
 			error(`[Burn] Buffer underflow: cannot read array count at offset {offset + 1} (bufLen {bufLen})`)
 		end
 		const count = buffer.readu16(buf, offset + 1)
+		if offset + 3 + count > bufLen then
+			error(`[Burn] Buffer underflow: long array of {count} items exceeds buffer size {bufLen}`)
+		end
 		local curr = offset + 3
 		for _ = 1, count do
 			curr = skip(buf, curr)
@@ -351,6 +366,9 @@ const function skip(buf: buffer, offset: number): number
 			error(`[Burn] Buffer underflow: cannot read map count at offset {offset + 1} (bufLen {bufLen})`)
 		end
 		const count = buffer.readu16(buf, offset + 1)
+		if offset + 3 + count * 2 > bufLen then
+			error(`[Burn] Buffer underflow: map of {count} entries exceeds buffer size {bufLen}`)
+		end
 		local curr = offset + 3
 		for _ = 1, count do
 			curr = skip(buf, curr)
