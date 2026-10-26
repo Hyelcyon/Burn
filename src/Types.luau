@@ -129,6 +129,61 @@ export type NetworkContext = {
 	instances: { Instance }?,
 }
 
+export type SendDispatcher = <T>(
+	target: Player | { Player } | PacketDefinition<T>,
+	packetOrData: PacketDefinition<T> | T,
+	maybeData: T?
+) -> ()
+
+export type SendImmediateDispatcher = <T>(
+	target: Player | { Player } | PacketDefinition<T>,
+	packetOrData: PacketDefinition<T> | T,
+	maybeData: T?
+) -> ()
+
+export type BroadcastDispatcher = <T>(packet: PacketDefinition<T>, data: T) -> ()
+
+export type BroadcastExceptDispatcher = <T>(excludedPlayer: Player, packet: PacketDefinition<T>, data: T) -> ()
+
+export type BroadcastImmediateDispatcher = <T>(packet: PacketDefinition<T>, data: T) -> ()
+
+export type OnDispatcher = <T>(
+	packet: PacketDefinition<T>,
+	listener: ((T) -> ()) | ((Player, T) -> ())
+) -> Connection
+
+export type OnceDispatcher = <T>(
+	packet: PacketDefinition<T>,
+	listener: ((T) -> ()) | ((Player, T) -> ())
+) -> Connection
+
+export type WaitDispatcher = <T>(packet: PacketDefinition<T>) -> (Player?, T)
+
+export type InvokeDispatcher = <Req, Res>(
+	packet: PacketDefinition<Req>,
+	responseSchema: TypeDescriptor<Res>,
+	data: Req
+) -> Res?
+
+export type HandleRequestDispatcher = <Req, Res>(
+	packet: PacketDefinition<Req>,
+	responseSchema: TypeDescriptor<Res>,
+	handler: (Player, Req) -> Res
+) -> ()
+
+export type NetworkBindings = {
+	read send: SendDispatcher,
+	read sendImmediate: SendImmediateDispatcher,
+	read broadcast: BroadcastDispatcher,
+	read broadcastExcept: BroadcastExceptDispatcher,
+	read broadcastImmediate: BroadcastImmediateDispatcher,
+	read on: OnDispatcher,
+	read once: OnceDispatcher,
+	read wait: WaitDispatcher,
+	read invoke: InvokeDispatcher,
+	read handleRequest: HandleRequestDispatcher,
+}
+
 type function InferType(D: type)
 	if not D:is("table") then
 		return types.unknown

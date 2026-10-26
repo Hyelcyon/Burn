@@ -16,8 +16,9 @@ end
 ]=]
 const function createEnumItemDescriptor(enumType: Enum): Types.TypeDescriptor<EnumItem>
 	const itemsByValue: { [number]: EnumItem } = {}
-	for _, item in enumType:GetEnumItems() do
-		itemsByValue[(item :: EnumItem).Value] = item :: EnumItem
+	for _, rawItem in enumType:GetEnumItems() do
+		const item: EnumItem = rawItem
+		itemsByValue[item.Value] = item
 	end
 
 	@native

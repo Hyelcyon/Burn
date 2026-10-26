@@ -5,24 +5,7 @@ const Types = require("@src/Types")
 export type PacketType = Types.PacketType
 export type PacketPriority = Types.PacketPriority
 export type PacketDefinition<T> = Types.PacketDefinition<T>
-
--- Invariant: NetworkBindings decouples PacketDefinition from Burn root to avoid circular dependency.
--- A localized dynamic function signature is required at this dependency inversion boundary because Luau enforces
--- contravariant generic parameter validation, which causes type solver recursion when passing generic root dispatchers.
-type DynamicFunction = (...any) -> ...any
-
-export type NetworkBindings = {
-	read send: DynamicFunction,
-	read sendImmediate: DynamicFunction,
-	read broadcast: DynamicFunction,
-	read broadcastExcept: DynamicFunction,
-	read broadcastImmediate: DynamicFunction,
-	read on: DynamicFunction,
-	read once: DynamicFunction,
-	read wait: DynamicFunction,
-	read invoke: DynamicFunction,
-	read handleRequest: DynamicFunction,
-}
+export type NetworkBindings = Types.NetworkBindings
 
 local networkBindings: NetworkBindings? = nil
 
@@ -57,9 +40,9 @@ function PacketMethods.send<T>(self: Types.PacketDefinition<T>, arg1: Player | {
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	if arg2 ~= nil or isPlayerOrPlayerList(arg1) then
-		networkBindings.send(arg1, self, arg2)
+		networkBindings.send(arg1 :: Player | { Player }, self, arg2)
 	else
-		networkBindings.send(self, arg1)
+		networkBindings.send(self, arg1 :: T)
 	end
 end
 
@@ -68,9 +51,9 @@ function PacketMethods.sendImmediate<T>(self: Types.PacketDefinition<T>, arg1: P
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	if arg2 ~= nil or isPlayerOrPlayerList(arg1) then
-		networkBindings.sendImmediate(arg1, self, arg2)
+		networkBindings.sendImmediate(arg1 :: Player | { Player }, self, arg2)
 	else
-		networkBindings.sendImmediate(self, arg1)
+		networkBindings.sendImmediate(self, arg1 :: T)
 	end
 end
 
