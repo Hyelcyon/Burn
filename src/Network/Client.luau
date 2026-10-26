@@ -8,6 +8,7 @@ const Registry = require("@packet/Registry")
 const ByteBuffer = require("@buffer/ByteBuffer")
 const Channel = require("@network/Channel")
 const OutgoingQueue = require("@network/OutgoingQueue")
+const InstanceCodec = require("@datatypes/Instance")
 
 export type Connection = Types.Connection
 
@@ -34,9 +35,10 @@ local isListening = false
 const packetsById = Registry.rawById
 
 @native
-const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
+const function decodeAndDispatch(rawBuf: buffer, rawInstances: { Instance }?, expectedType: Types.PacketType)
 	local offset = 0
 	const bufLen = buffer.len(rawBuf)
+	InstanceCodec.setIncomingInstances(rawInstances)
 
 	while offset + Constants.HEADER_SIZE <= bufLen do
 		const packetId = buffer.readu8(rawBuf, offset)
@@ -91,6 +93,8 @@ const function decodeAndDispatch(rawBuf: buffer, expectedType: Types.PacketType)
 
 		offset = nextOffset
 	end
+
+	InstanceCodec.setIncomingInstances(nil)
 end
 
 const function ensureListening()
@@ -104,17 +108,23 @@ const function ensureListening()
 	end
 
 	task.spawn(function()
-		Channel.getReliableEvent().OnClientEvent:Connect(function(rawBuf)
+		Channel.getReliableEvent().OnClientEvent:Connect(function(rawBuf, rawInstances)
 			if typeof(rawBuf) == "buffer" then
-				decodeAndDispatch(rawBuf, "Reliable")
+				const instances = if typeof(rawInstances) == "table" and #rawInstances <= 65535
+					then rawInstances
+					else nil
+				decodeAndDispatch(rawBuf, instances, "Reliable")
 			end
 		end)
 	end)
 
 	task.spawn(function()
-		Channel.getUnreliableEvent().OnClientEvent:Connect(function(rawBuf)
+		Channel.getUnreliableEvent().OnClientEvent:Connect(function(rawBuf, rawInstances)
 			if typeof(rawBuf) == "buffer" then
-				decodeAndDispatch(rawBuf, "Unreliable")
+				const instances = if typeof(rawInstances) == "table" and #rawInstances <= 65535
+					then rawInstances
+					else nil
+				decodeAndDispatch(rawBuf, instances, "Unreliable")
 			end
 		end)
 	end)
@@ -198,11 +208,15 @@ function Client.invoke<Req, Res>(
 		error(`Client.invoke requires a packet with packetType == 'Request' (got '{packetDef.packetType}')`)
 	end
 
+	local reqInstances: { Instance } = {}
+	InstanceCodec.setOutgoingInstances(reqInstances)
+
 	local reqBuf: buffer
 	const schemaSize = packetDef.schema.size
 	if typeof(schemaSize) == "number" then
 		-- Fast path: Known fixed schema size allows zero-copy serialization directly into wire buffer.
 		if schemaSize > Constants.MAX_PAYLOAD_SIZE then
+			InstanceCodec.setOutgoingInstances(nil)
 			error(`Request payload ({schemaSize} bytes) exceeds limit ({Constants.MAX_PAYLOAD_SIZE} bytes)`)
 		end
 		reqBuf = buffer.create(Constants.HEADER_SIZE + schemaSize)
@@ -210,6 +224,7 @@ function Client.invoke<Req, Res>(
 		buffer.writeu16(reqBuf, 1, schemaSize)
 		const writtenEnd = packetDef.schema.write(reqBuf, Constants.HEADER_SIZE, data)
 		if writtenEnd ~= Constants.HEADER_SIZE + schemaSize then
+			InstanceCodec.setOutgoingInstances(nil)
 			error(
 				`[Burn] Fixed-size schema '{packetDef.name}' wrote {writtenEnd - Constants.HEADER_SIZE} bytes, expected {schemaSize}`
 			)
@@ -220,6 +235,7 @@ function Client.invoke<Req, Res>(
 		ByteBuffer.ensureCapacity(scratch, Constants.MAX_PACKET_SIZE)
 		const reqLen = packetDef.schema.write(scratch.raw, 0, data)
 		if reqLen < 0 or reqLen > Constants.MAX_PAYLOAD_SIZE then
+			InstanceCodec.setOutgoingInstances(nil)
 			error(`Request payload ({reqLen} bytes) exceeds limit ({Constants.MAX_PAYLOAD_SIZE} bytes)`)
 		end
 
@@ -231,8 +247,10 @@ function Client.invoke<Req, Res>(
 		end
 	end
 
-	const invokeOk, resBuf = pcall(function()
-		return Channel.getRequestFunction():InvokeServer(reqBuf)
+	InstanceCodec.setOutgoingInstances(nil)
+
+	const invokeOk, resBuf, resInstances = pcall(function()
+		return Channel.getRequestFunction():InvokeServer(reqBuf, if #reqInstances > 0 then reqInstances else nil)
 	end)
 	if not invokeOk or typeof(resBuf) ~= "buffer" then
 		return nil
@@ -250,7 +268,10 @@ function Client.invoke<Req, Res>(
 		return nil
 	end
 
+	const incomingInstances = if typeof(resInstances) == "table" and #resInstances <= 65535 then resInstances else nil
+	InstanceCodec.setIncomingInstances(incomingInstances)
 	const readOk, res1, res2 = pcall(responseSchema.read, resBuf, Constants.HEADER_SIZE)
+	InstanceCodec.setIncomingInstances(nil)
 	if not readOk then
 		return nil
 	end

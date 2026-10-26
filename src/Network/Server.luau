@@ -9,6 +9,7 @@ const Registry = require("@packet/Registry")
 const ByteBuffer = require("@buffer/ByteBuffer")
 const Channel = require("@network/Channel")
 const OutgoingQueue = require("@network/OutgoingQueue")
+const InstanceCodec = require("@datatypes/Instance")
 
 export type Connection = Types.Connection
 
@@ -84,9 +85,16 @@ const packetsById = Registry.rawById
 -- Parses sequential packets from an incoming buffer.
 -- Terminated if packet count exceeds MAX_PACKETS_PER_BATCH (256) to bound CPU execution time.
 @native
-const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, expectedType: Types.PacketType)
+const function decodeBatchFast(
+	player: Player,
+	rawBuf: buffer,
+	rawInstances: { Instance }?,
+	bufLen: number,
+	expectedType: Types.PacketType
+)
 	local offset = 0
 	local packetCount = 0
+	InstanceCodec.setIncomingInstances(rawInstances)
 
 	while offset + Constants.HEADER_SIZE <= bufLen do
 		packetCount += 1
@@ -142,11 +150,18 @@ const function decodeBatchFast(player: Player, rawBuf: buffer, bufLen: number, e
 
 		offset = nextOffset
 	end
+
+	InstanceCodec.setIncomingInstances(nil)
 end
 
 -- Validates rate limits and isolates batch decoding within a pcall to ensure malformed
 -- or adversarial client buffers are dropped without terminating server frame execution.
-const function decodeAndDispatch(player: Player, rawBuf: buffer, expectedType: Types.PacketType)
+const function decodeAndDispatch(
+	player: Player,
+	rawBuf: buffer,
+	rawInstances: { Instance }?,
+	expectedType: Types.PacketType
+)
 	const bufLen = buffer.len(rawBuf)
 	if bufLen < Constants.HEADER_SIZE or bufLen > Constants.MAX_PACKET_SIZE then
 		checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
@@ -157,7 +172,8 @@ const function decodeAndDispatch(player: Player, rawBuf: buffer, expectedType: T
 		return
 	end
 
-	const ok: boolean, err: unknown? = pcall(decodeBatchFast, player, rawBuf, bufLen, expectedType)
+	const ok: boolean, err: unknown? = pcall(decodeBatchFast, player, rawBuf, rawInstances, bufLen, expectedType)
+	InstanceCodec.setIncomingInstances(nil)
 	if not ok then
 		warn(`[Burn] Dropped malformed packet batch from {player.Name}: {err}`)
 	end
@@ -180,43 +196,49 @@ const function ensureListening()
 		playerRateLimits[player] = nil
 	end)
 
-	Channel.getReliableEvent().OnServerEvent:Connect(function(player, rawBuf)
+	Channel.getReliableEvent().OnServerEvent:Connect(function(player, rawBuf, rawInstances)
 		if not isPlayerActive(player) then
 			return
 		end
 		if typeof(rawBuf) == "buffer" then
-			decodeAndDispatch(player, rawBuf, "Reliable")
+			const instances = if typeof(rawInstances) == "table" and #rawInstances <= 65535 then rawInstances else nil
+			decodeAndDispatch(player, rawBuf, instances, "Reliable")
 		else
 			checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
 		end
 	end)
 
-	Channel.getUnreliableEvent().OnServerEvent:Connect(function(player, rawBuf)
+	Channel.getUnreliableEvent().OnServerEvent:Connect(function(player, rawBuf, rawInstances)
 		if not isPlayerActive(player) then
 			return
 		end
 		if typeof(rawBuf) == "buffer" then
-			decodeAndDispatch(player, rawBuf, "Unreliable")
+			const instances = if typeof(rawInstances) == "table" and #rawInstances <= 65535 then rawInstances else nil
+			decodeAndDispatch(player, rawBuf, instances, "Unreliable")
 		else
 			checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
 		end
 	end)
 
-	Channel.getRequestFunction().OnServerInvoke = function(player: Player, reqBuf: unknown): buffer?
+	Channel.getRequestFunction().OnServerInvoke = function(
+		player: Player,
+		reqBuf: unknown,
+		reqInstances: unknown
+	): (buffer?, { Instance }?)
 		if not isPlayerActive(player) then
-			return nil
+			return nil, nil
 		end
 		if typeof(reqBuf) ~= "buffer" then
 			checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
-			return nil
+			return nil, nil
 		end
 		const reqLen = buffer.len(reqBuf)
 		if reqLen < Constants.HEADER_SIZE or reqLen > Constants.MAX_PACKET_SIZE then
 			checkRateLimit(player, Constants.MIN_PACKET_COST_BYTES)
-			return nil
+			return nil, nil
 		end
 		if not checkRateLimit(player, reqLen) then
-			return nil
+			return nil, nil
 		end
 
 		const packetId = buffer.readu8(reqBuf, 0)
@@ -225,30 +247,36 @@ const function ensureListening()
 		const expectedEnd = payloadStart + payloadLen
 
 		if expectedEnd ~= reqLen then
-			return nil
+			return nil, nil
 		end
 
 		const handler = requestHandlersByPacketId[packetId]
 		if handler == nil then
-			return nil
+			return nil, nil
 		end
 
 		const packetDef = Registry.getById(packetId)
 		if packetDef == nil or packetDef.packetType ~= "Request" then
-			return nil
+			return nil, nil
 		end
 
 		const fixedReqSize = packetDef.schema.size
 		if typeof(fixedReqSize) == "number" and payloadLen ~= fixedReqSize then
-			return nil
+			return nil, nil
 		end
 
+		const instances = if typeof(reqInstances) == "table" and #reqInstances <= 65535
+			then reqInstances :: { Instance }
+			else nil
+		InstanceCodec.setIncomingInstances(instances)
 		const readOk, reqData, readEndOffset = pcall(packetDef.schema.read, reqBuf, payloadStart)
+		InstanceCodec.setIncomingInstances(nil)
+
 		if not readOk then
-			return nil
+			return nil, nil
 		end
 		if typeof(readEndOffset) == "number" and readEndOffset ~= expectedEnd then
-			return nil
+			return nil, nil
 		end
 
 		const success, resData, resSchema = pcall(handler, player, reqData)
@@ -256,8 +284,11 @@ const function ensureListening()
 			if not success then
 				warn(`[Burn] Request handler error for '{packetDef.name}': {resData}`)
 			end
-			return nil
+			return nil, nil
 		end
+
+		local resInstances: { Instance } = {}
+		InstanceCodec.setOutgoingInstances(resInstances)
 
 		const resSize = resSchema.size
 		local out: buffer
@@ -266,14 +297,16 @@ const function ensureListening()
 		if typeof(resSize) == "number" then
 			-- Fast path: Known fixed response size allows direct zero-copy write into wire buffer.
 			if resSize > Constants.MAX_PAYLOAD_SIZE then
-				return nil
+				InstanceCodec.setOutgoingInstances(nil)
+				return nil, nil
 			end
 			out = buffer.create(Constants.HEADER_SIZE + resSize)
 			buffer.writeu8(out, 0, packetId)
 			buffer.writeu16(out, 1, resSize)
 			const writeOk, endOffsetOrErr = pcall(writeFn, out, Constants.HEADER_SIZE, resData)
 			if not writeOk or endOffsetOrErr ~= Constants.HEADER_SIZE + resSize then
-				return nil
+				InstanceCodec.setOutgoingInstances(nil)
+				return nil, nil
 			end
 		else
 			-- Dynamic path: Serialize into reusable thread-local scratch buffer first, then copy exact payload.
@@ -282,12 +315,14 @@ const function ensureListening()
 
 			const writeOk, resLenOrErr = pcall(writeFn, scratch.raw, 0, resData)
 			if not writeOk then
-				return nil
+				InstanceCodec.setOutgoingInstances(nil)
+				return nil, nil
 			end
 
 			const resLen = resLenOrErr :: number
 			if resLen < 0 or resLen > Constants.MAX_PAYLOAD_SIZE then
-				return nil
+				InstanceCodec.setOutgoingInstances(nil)
+				return nil, nil
 			end
 
 			out = buffer.create(Constants.HEADER_SIZE + resLen)
@@ -298,7 +333,8 @@ const function ensureListening()
 			end
 		end
 
-		return out
+		InstanceCodec.setOutgoingInstances(nil)
+		return out, if #resInstances > 0 then resInstances else nil
 	end
 end
 
