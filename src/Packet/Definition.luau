@@ -85,7 +85,7 @@ function PacketMethods.on<T>(
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
-	return networkBindings.on(self, listener)
+	return networkBindings.on(self, listener :: (Player, T) -> ())
 end
 
 function PacketMethods.once<T>(
@@ -95,7 +95,7 @@ function PacketMethods.once<T>(
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
-	return networkBindings.once(self, listener)
+	return networkBindings.once(self, listener :: (Player, T) -> ())
 end
 
 function PacketMethods.wait<T>(self: Types.PacketDefinition<T>): (Player?, T)
@@ -105,17 +105,17 @@ function PacketMethods.wait<T>(self: Types.PacketDefinition<T>): (Player?, T)
 	return networkBindings.wait(self)
 end
 
-function PacketMethods.invoke<T, Res>(self: Types.PacketDefinition<T>, responseSchema: Types.TypeDescriptor<Res>, data: T): Res?
+function PacketMethods.invoke<T, ResD>(self: Types.PacketHandle<T>, responseSchema: ResD, data: T): Types.InferType<ResD>?
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
 	end
 	return networkBindings.invoke(self, responseSchema, data)
 end
 
-function PacketMethods.handleRequest<T, Res>(
-	self: Types.PacketDefinition<T>,
-	responseSchema: Types.TypeDescriptor<Res>,
-	handler: (Player, T) -> Res
+function PacketMethods.handleRequest<T, ResD>(
+	self: Types.PacketHandle<T>,
+	responseSchema: ResD,
+	handler: (Player, T) -> Types.InferType<ResD>
 )
 	if networkBindings == nil then
 		error("[Burn] Network bindings not initialized; require Burn root first")
@@ -127,13 +127,15 @@ end
 	@within Packet
 	Validates packet parameters and constructs an immutable PacketDefinition.
 ]=]
-const function definePacket<T>(
+const function definePacket<D>(
 	id: number,
 	name: string,
 	packetType: PacketType,
-	schema: Types.TypeDescriptor<T>,
+	schema: D,
 	priority: PacketPriority?
-): PacketDefinition<T>
+): PacketDefinition<Types.InferType<D>>
+	type T = Types.InferType<D>
+
 	assert(typeof(id) == "number" and id % 1 == 0, "Packet ID must be an integer")
 	assert(typeof(name) == "string" and #name > 0, "Packet name must be a non-empty string")
 	const resolvedPacketType: PacketType = packetType
@@ -141,11 +143,12 @@ const function definePacket<T>(
 		packetType == "Reliable" or packetType == "Unreliable" or packetType == "Request",
 		"Invalid packetType; must be 'Reliable', 'Unreliable', or 'Request'"
 	)
+	const schemaDesc = schema :: Types.AnyTypeDescriptor
 	assert(
-		typeof(schema) == "table"
-			and typeof(schema.write) == "function"
-			and typeof(schema.read) == "function"
-			and typeof(schema.skip) == "function",
+		typeof(schemaDesc) == "table"
+			and typeof(schemaDesc.write) == "function"
+			and typeof(schemaDesc.read) == "function"
+			and typeof(schemaDesc.skip) == "function",
 		"Invalid schema; must have write, read, and skip functions"
 	)
 
@@ -157,7 +160,7 @@ const function definePacket<T>(
 		packetType = resolvedPacketType,
 		priority = resolvedPriority,
 		priorityIndex = priorityIndex,
-		schema = schema,
+		schema = schema :: any,
 	}, PacketMethods)) :: PacketDefinition<T>
 end
 
@@ -168,14 +171,14 @@ local ExportDefinition = setmetatable({
 		networkBindings = bindings
 	end,
 }, {
-	__call = function<T>(
+	__call = function<D>(
 		_self: unknown,
 		id: number,
 		name: string,
 		packetType: PacketType,
-		schema: Types.TypeDescriptor<T>,
+		schema: D,
 		priority: PacketPriority?
-	): PacketDefinition<T>
+	): PacketDefinition<Types.InferType<D>>
 		return definePacket(id, name, packetType, schema, priority)
 	end,
 })

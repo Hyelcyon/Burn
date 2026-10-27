@@ -37,20 +37,21 @@ end
 local clientReliable = createPriorityQueues()
 local clientUnreliable = createPriorityQueues()
 
-local playerReliable: { [Player]: PriorityQueues? } = {}
-local playerUnreliable: { [Player]: PriorityQueues? } = {}
+local playerReliable: { [Player]: PriorityQueues? } =
+	setmetatable({} :: { [Player]: PriorityQueues? }, { __mode = "k" })
+local playerUnreliable: { [Player]: PriorityQueues? } =
+	setmetatable({} :: { [Player]: PriorityQueues? }, { __mode = "k" })
 local broadcastReliable = createPriorityQueues()
 local broadcastUnreliable = createPriorityQueues()
 
 local activeReliablePlayers: { Player } = {}
-local isReliablePlayerDirty: { [Player]: boolean? } = {}
+local isReliablePlayerDirty: { [Player]: boolean? } = setmetatable({} :: { [Player]: boolean? }, { __mode = "k" })
 local activeUnreliablePlayers: { Player } = {}
-local isUnreliablePlayerDirty: { [Player]: boolean? } = {}
+local isUnreliablePlayerDirty: { [Player]: boolean? } = setmetatable({} :: { [Player]: boolean? }, { __mode = "k" })
 
 -- Weak-keyed set to prevent memory leaks while verifying player validity during disconnect.
 local removingPlayers = setmetatable({} :: { [Player]: boolean? }, { __mode = "k" })
 local isInitialized = false
-local isClientChannelReady = false
 
 const function isPlayerActive(player: Player): boolean
 	return not removingPlayers[player] and player.Parent == Players
@@ -180,7 +181,7 @@ const function flushPriorityQueues(queues: PriorityQueues): (buffer?, { Instance
 end
 
 @native
-const function serializeToScratch<T>(packetDef: Types.PacketDefinition<T>, data: T): (buffer, number)
+const function serializeToScratch<T>(packetDef: Types.PacketHandle<T>, data: T): (buffer, number)
 	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
 		error(`Packet '{packetDef.name}' has type '{packetDef.packetType}' and cannot be sent as an event`)
 	end
@@ -206,7 +207,7 @@ end
 const function writeFixedToBuffer<T>(
 	queues: PriorityQueues,
 	priorityIndex: number,
-	packetDef: Types.PacketDefinition<T>,
+	packetDef: Types.PacketHandle<T>,
 	schemaSize: number,
 	data: T
 )
@@ -254,7 +255,7 @@ const function writeSerializedToBuffer(
 end
 
 @native
-const function buildImmediateBuffer<T>(packetDef: Types.PacketDefinition<T>, data: T): (buffer, { Instance }?)
+const function buildImmediateBuffer<T>(packetDef: Types.PacketHandle<T>, data: T): (buffer, { Instance }?)
 	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
 		error(`Packet '{packetDef.name}' has type '{packetDef.packetType}' and cannot be sent as an event`)
 	end
@@ -262,7 +263,7 @@ const function buildImmediateBuffer<T>(packetDef: Types.PacketDefinition<T>, dat
 	local instances: { Instance } = {}
 	InstanceCodec.setOutgoingInstances(instances)
 
-	local out: buffer
+	local ok: boolean, resBuf: buffer?, resErr: unknown? = true, nil, nil
 	const schemaSize = packetDef.schema.size
 	if typeof(schemaSize) == "number" then
 		const packetTotal = Constants.HEADER_SIZE + schemaSize
@@ -273,36 +274,53 @@ const function buildImmediateBuffer<T>(packetDef: Types.PacketDefinition<T>, dat
 			)
 		end
 
-		out = buffer.create(packetTotal)
+		local out = buffer.create(packetTotal)
 		buffer.writeu8(out, 0, packetDef.id)
 		buffer.writeu16(out, 1, schemaSize)
 		const payloadStart = Constants.HEADER_SIZE
-		const nextOffset = packetDef.schema.write(out, payloadStart, data)
-		const writtenLen = nextOffset - payloadStart
-		if writtenLen ~= schemaSize then
-			InstanceCodec.setOutgoingInstances(nil)
-			error(`Packet '{packetDef.name}' wrote {writtenLen} bytes, expected fixed size {schemaSize}`)
+		local nextOffset = 0
+		ok, resErr = pcall(function()
+			nextOffset = packetDef.schema.write(out, payloadStart, data)
+		end)
+		if ok then
+			const writtenLen = nextOffset - payloadStart
+			if writtenLen ~= schemaSize then
+				ok = false
+				resErr = `Packet '{packetDef.name}' wrote {writtenLen} bytes, expected fixed size {schemaSize}`
+			else
+				resBuf = out
+			end
 		end
 	else
-		const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
-		const packetTotal = Constants.HEADER_SIZE + payloadLen
-		if packetDef.packetType == "Unreliable" and packetTotal > Constants.MAX_UNRELIABLE_BYTES then
-			InstanceCodec.setOutgoingInstances(nil)
-			error(
-				`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
-			)
-		end
-
-		out = buffer.create(packetTotal)
-		buffer.writeu8(out, 0, packetDef.id)
-		buffer.writeu16(out, 1, payloadLen)
-		if payloadLen > 0 then
-			buffer.copy(out, Constants.HEADER_SIZE, scratchRaw, 0, payloadLen)
+		local scratchRaw: buffer? = nil
+		local payloadLen = 0
+		ok, resErr = pcall(function()
+			scratchRaw, payloadLen = serializeToScratch(packetDef, data)
+		end)
+		if ok and scratchRaw ~= nil then
+			const packetTotal = Constants.HEADER_SIZE + payloadLen
+			if packetDef.packetType == "Unreliable" and packetTotal > Constants.MAX_UNRELIABLE_BYTES then
+				ok = false
+				resErr =
+					`Unreliable packet '{packetDef.name}' ({packetTotal} bytes) exceeds {Constants.MAX_UNRELIABLE_BYTES} bytes`
+			else
+				local out = buffer.create(packetTotal)
+				buffer.writeu8(out, 0, packetDef.id)
+				buffer.writeu16(out, 1, payloadLen)
+				if payloadLen > 0 then
+					buffer.copy(out, Constants.HEADER_SIZE, scratchRaw, 0, payloadLen)
+				end
+				resBuf = out
+			end
 		end
 	end
 
 	InstanceCodec.setOutgoingInstances(nil)
-	return out, if #instances > 0 then instances else nil
+	if resBuf == nil then
+		error(resErr)
+	end
+
+	return resBuf, if #instances > 0 then instances else nil
 end
 
 const function getPlayerQueues(dict: { [Player]: PriorityQueues? }, player: Player): PriorityQueues
@@ -372,14 +390,10 @@ function OutgoingQueue.init()
 			table.clear(activeUnreliablePlayers)
 		end)
 	else
-		task.spawn(function()
-			Channel.getReliableEvent()
-			Channel.getUnreliableEvent()
-			isClientChannelReady = true
-		end)
+		Channel.init()
 
 		RunService.Heartbeat:Connect(function()
-			if not isClientChannelReady then
+			if not Channel.isReady() then
 				return
 			end
 
@@ -397,7 +411,7 @@ function OutgoingQueue.init()
 end
 
 @native
-function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketHandle<T>, data: T)
 	if not isInitialized then
 		OutgoingQueue.init()
 	end
@@ -417,7 +431,7 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 			error(`Packet '{packetDef.name}' ({packetTotal} bytes) exceeds limit ({maxLimit} bytes)`)
 		end
 		const totalQueued = targetQueues.totalSize
-		if isClientChannelReady and totalQueued > 0 and totalQueued + packetTotal > maxLimit then
+		if Channel.isReady() and totalQueued > 0 and totalQueued + packetTotal > maxLimit then
 			const flushed, flushedInst = flushPriorityQueues(targetQueues)
 			if flushed ~= nil then
 				fireServerFlush(isUnreliable, flushed, flushedInst)
@@ -425,32 +439,31 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 		end
 
 		InstanceCodec.setOutgoingInstances(targetQueues.instances)
-		writeFixedToBuffer(targetQueues, priorityIndex, packetDef, schemaSize, data)
+		const ok, err = pcall(writeFixedToBuffer, targetQueues, priorityIndex, packetDef, schemaSize, data)
 		InstanceCodec.setOutgoingInstances(nil)
+		if not ok then
+			error(err)
+		end
 		return
 	end
 
-	if
-		isClientChannelReady
-		and targetQueues.totalSize > 0
-		and targetQueues.totalSize + Constants.HEADER_SIZE >= maxLimit
-	then
-		const flushed, flushedInst = flushPriorityQueues(targetQueues)
-		if flushed ~= nil then
-			fireServerFlush(isUnreliable, flushed, flushedInst)
-		end
-	end
-
 	InstanceCodec.setOutgoingInstances(targetQueues.instances)
-	const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
+	local scratchRaw: buffer? = nil
+	local payloadLen = 0
+	const ok, err = pcall(function()
+		scratchRaw, payloadLen = serializeToScratch(packetDef, data)
+	end)
 	InstanceCodec.setOutgoingInstances(nil)
+	if not ok or scratchRaw == nil then
+		error(err)
+	end
 
 	const packetTotal = Constants.HEADER_SIZE + payloadLen
 	if packetTotal > maxLimit then
 		error(`Packet '{packetDef.name}' ({packetTotal} bytes) exceeds limit ({maxLimit} bytes)`)
 	end
 	const totalQueued = targetQueues.totalSize
-	if isClientChannelReady and totalQueued > 0 and totalQueued + packetTotal > maxLimit then
+	if Channel.isReady() and totalQueued > 0 and totalQueued + packetTotal > maxLimit then
 		const flushed, flushedInst = flushPriorityQueues(targetQueues)
 		if flushed ~= nil then
 			fireServerFlush(isUnreliable, flushed, flushedInst)
@@ -461,7 +474,7 @@ function OutgoingQueue.clientEnqueue<T>(packetDef: Types.PacketDefinition<T>, da
 end
 
 @native
-function OutgoingQueue.clientSendImmediate<T>(packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.clientSendImmediate<T>(packetDef: Types.PacketHandle<T>, data: T)
 	if not isInitialized then
 		OutgoingQueue.init()
 	end
@@ -470,7 +483,7 @@ function OutgoingQueue.clientSendImmediate<T>(packetDef: Types.PacketDefinition<
 end
 
 @native
-function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketHandle<T>, data: T)
 	if not isPlayerActive(player) then
 		return
 	end
@@ -503,8 +516,11 @@ function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketD
 		end
 
 		InstanceCodec.setOutgoingInstances(pQueues.instances)
-		writeFixedToBuffer(pQueues, priorityIndex, packetDef, schemaSize, data)
+		const ok, err = pcall(writeFixedToBuffer, pQueues, priorityIndex, packetDef, schemaSize, data)
 		InstanceCodec.setOutgoingInstances(nil)
+		if not ok then
+			error(err)
+		end
 
 		if isUnreliable then
 			if not isUnreliablePlayerDirty[player] then
@@ -520,16 +536,16 @@ function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketD
 		return
 	end
 
-	if pQueues.totalSize > 0 and pQueues.totalSize + Constants.HEADER_SIZE >= maxLimit then
-		const flushed, flushedInst = flushPriorityQueues(pQueues)
-		if flushed ~= nil then
-			fireClientFlush(player, isUnreliable, flushed, flushedInst)
-		end
-	end
-
 	InstanceCodec.setOutgoingInstances(pQueues.instances)
-	const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
+	local scratchRaw: buffer? = nil
+	local payloadLen = 0
+	const ok, err = pcall(function()
+		scratchRaw, payloadLen = serializeToScratch(packetDef, data)
+	end)
 	InstanceCodec.setOutgoingInstances(nil)
+	if not ok or scratchRaw == nil then
+		error(err)
+	end
 
 	const packetTotal = Constants.HEADER_SIZE + payloadLen
 	if packetTotal > maxLimit then
@@ -557,24 +573,87 @@ function OutgoingQueue.serverEnqueue<T>(player: Player, packetDef: Types.PacketD
 	end
 end
 
--- Delegates to serverEnqueue per player to guarantee independent instance indexing and MTU limits.
+-- Pre-serializes dynamic payload once into scratch buffer if no Instance side-cars are present,
+-- bypassing duplicate serialization passes across multiple recipients.
 @native
-function OutgoingQueue.serverEnqueueList<T>(players: { Player }, packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.serverEnqueueList<T>(players: { Player }, packetDef: Types.PacketHandle<T>, data: T)
 	if #players == 0 then
 		return
 	end
 	if not isInitialized then
 		OutgoingQueue.init()
 	end
+
+	const schemaSize = packetDef.schema.size
+	if typeof(schemaSize) == "number" then
+		for _, player in players do
+			if isPlayerActive(player) then
+				OutgoingQueue.serverEnqueue(player, packetDef, data)
+			end
+		end
+		return
+	end
+
+	local tempInstances: { Instance } = {}
+	InstanceCodec.setOutgoingInstances(tempInstances)
+	local scratchRaw: buffer? = nil
+	local payloadLen = 0
+	const ok, err = pcall(function()
+		scratchRaw, payloadLen = serializeToScratch(packetDef, data)
+	end)
+	InstanceCodec.setOutgoingInstances(nil)
+	if not ok or scratchRaw == nil then
+		error(err)
+	end
+
+	if #tempInstances > 0 then
+		for _, player in players do
+			if isPlayerActive(player) then
+				OutgoingQueue.serverEnqueue(player, packetDef, data)
+			end
+		end
+		return
+	end
+
+	const isUnreliable = packetDef.packetType == "Unreliable"
+	const maxLimit = if isUnreliable then Constants.MAX_UNRELIABLE_BYTES else Constants.MAX_PACKET_SIZE
+	const priorityIndex = packetDef.priorityIndex
+	const packetTotal = Constants.HEADER_SIZE + payloadLen
+	if packetTotal > maxLimit then
+		error(`Packet '{packetDef.name}' ({packetTotal} bytes) exceeds limit ({maxLimit} bytes)`)
+	end
+
 	for _, player in players do
 		if isPlayerActive(player) then
-			OutgoingQueue.serverEnqueue(player, packetDef, data)
+			const pQueues = if isUnreliable
+				then getPlayerQueues(playerUnreliable, player)
+				else getPlayerQueues(playerReliable, player)
+			const totalQueued = pQueues.totalSize
+			if totalQueued > 0 and totalQueued + packetTotal > maxLimit then
+				const flushed, flushedInst = flushPriorityQueues(pQueues)
+				if flushed ~= nil then
+					fireClientFlush(player, isUnreliable, flushed, flushedInst)
+				end
+			end
+
+			writeSerializedToBuffer(pQueues, priorityIndex, packetDef.id, scratchRaw, payloadLen)
+			if isUnreliable then
+				if not isUnreliablePlayerDirty[player] then
+					isUnreliablePlayerDirty[player] = true
+					table.insert(activeUnreliablePlayers, player)
+				end
+			else
+				if not isReliablePlayerDirty[player] then
+					isReliablePlayerDirty[player] = true
+					table.insert(activeReliablePlayers, player)
+				end
+			end
 		end
 	end
 end
 
 @native
-function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketHandle<T>, data: T)
 	if not isInitialized then
 		OutgoingQueue.init()
 	end
@@ -602,21 +681,24 @@ function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, 
 		end
 
 		InstanceCodec.setOutgoingInstances(targetQueues.instances)
-		writeFixedToBuffer(targetQueues, priorityIndex, packetDef, schemaSize, data)
+		const ok, err = pcall(writeFixedToBuffer, targetQueues, priorityIndex, packetDef, schemaSize, data)
 		InstanceCodec.setOutgoingInstances(nil)
+		if not ok then
+			error(err)
+		end
 		return
 	end
 
-	if targetQueues.totalSize > 0 and targetQueues.totalSize + Constants.HEADER_SIZE >= maxLimit then
-		const flushed, flushedInst = flushPriorityQueues(targetQueues)
-		if flushed ~= nil then
-			fireAllClientsFlush(isUnreliable, flushed, flushedInst)
-		end
-	end
-
 	InstanceCodec.setOutgoingInstances(targetQueues.instances)
-	const scratchRaw, payloadLen = serializeToScratch(packetDef, data)
+	local scratchRaw: buffer? = nil
+	local payloadLen = 0
+	const ok, err = pcall(function()
+		scratchRaw, payloadLen = serializeToScratch(packetDef, data)
+	end)
 	InstanceCodec.setOutgoingInstances(nil)
+	if not ok or scratchRaw == nil then
+		error(err)
+	end
 
 	const packetTotal = Constants.HEADER_SIZE + payloadLen
 	if packetTotal > maxLimit then
@@ -634,19 +716,29 @@ function OutgoingQueue.serverBroadcast<T>(packetDef: Types.PacketDefinition<T>, 
 end
 
 @native
-function OutgoingQueue.serverBroadcastExcept<T>(excludedPlayer: Player, packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.serverBroadcastExcept<T>(excludedPlayer: Player, packetDef: Types.PacketHandle<T>, data: T)
 	if not isInitialized then
 		OutgoingQueue.init()
 	end
-	for _, player in Players:GetPlayers() do
-		if player ~= excludedPlayer and isPlayerActive(player) then
-			OutgoingQueue.serverEnqueue(player, packetDef, data)
+	const allPlayers = Players:GetPlayers()
+	if #allPlayers <= 1 then
+		if #allPlayers == 1 and allPlayers[1] == excludedPlayer then
+			return
 		end
 	end
+
+	const recipients: { Player } = {}
+	for _, player in allPlayers do
+		if player ~= excludedPlayer and isPlayerActive(player) then
+			table.insert(recipients, player)
+		end
+	end
+
+	OutgoingQueue.serverEnqueueList(recipients, packetDef, data)
 end
 
 @native
-function OutgoingQueue.serverSendImmediate<T>(player: Player, packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.serverSendImmediate<T>(player: Player, packetDef: Types.PacketHandle<T>, data: T)
 	if not isPlayerActive(player) then
 		return
 	end
@@ -658,7 +750,7 @@ function OutgoingQueue.serverSendImmediate<T>(player: Player, packetDef: Types.P
 end
 
 @native
-function OutgoingQueue.serverSendImmediateList<T>(players: { Player }, packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.serverSendImmediateList<T>(players: { Player }, packetDef: Types.PacketHandle<T>, data: T)
 	if #players == 0 then
 		return
 	end
@@ -675,7 +767,7 @@ function OutgoingQueue.serverSendImmediateList<T>(players: { Player }, packetDef
 end
 
 @native
-function OutgoingQueue.serverBroadcastImmediate<T>(packetDef: Types.PacketDefinition<T>, data: T)
+function OutgoingQueue.serverBroadcastImmediate<T>(packetDef: Types.PacketHandle<T>, data: T)
 	if not isInitialized then
 		OutgoingQueue.init()
 	end

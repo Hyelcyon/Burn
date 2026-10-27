@@ -40,7 +40,7 @@ local requestHandlersByPacketId: {
 	[number]: (player: Player, reqData: unknown) -> (unknown, Types.AnyTypeDescriptor),
 } =
 	{}
-local playerRateLimits: { [Player]: RateLimit? } = {}
+local playerRateLimits: { [Player]: RateLimit? } = setmetatable({} :: { [Player]: RateLimit? }, { __mode = "k" })
 local removingPlayers = setmetatable({} :: { [Player]: boolean? }, { __mode = "k" })
 local isListening = false
 
@@ -52,18 +52,18 @@ end
 -- a minimum of MIN_PACKET_COST_BYTES (32 bytes) to penalize zero-byte and malformed flood attacks.
 @native
 const function checkRateLimit(player: Player, size: number): boolean
+	const cost = math.max(size, Constants.MIN_PACKET_COST_BYTES)
 	const now = os.clock()
-	local limit: RateLimit
 	const existing = playerRateLimits[player]
 	if existing == nil then
-		limit = {
+		playerRateLimits[player] = {
 			lastTime = now,
-			currentBytes = Constants.RATE_LIMIT_BYTES_PER_SEC,
+			currentBytes = Constants.RATE_LIMIT_BYTES_PER_SEC - cost,
 		}
-		playerRateLimits[player] = limit
-	else
-		limit = existing
+		return true
 	end
+
+	const limit = existing
 	const elapsed = math.max(0, now - limit.lastTime)
 	limit.currentBytes = math.min(
 		limit.currentBytes + (elapsed * Constants.RATE_LIMIT_BYTES_PER_SEC),
@@ -71,7 +71,6 @@ const function checkRateLimit(player: Player, size: number): boolean
 	)
 	limit.lastTime = now
 
-	const cost = math.max(size, Constants.MIN_PACKET_COST_BYTES)
 	if limit.currentBytes >= cost then
 		limit.currentBytes -= cost
 		return true
@@ -338,7 +337,7 @@ const function ensureListening()
 	end
 end
 
-function Server.send<T>(target: Player | { Player }, packetDef: Types.PacketDefinition<T>, data: T)
+function Server.send<T>(target: Player | { Player }, packetDef: Types.PacketHandle<T>, data: T)
 	if typeof(target) == "table" then
 		OutgoingQueue.serverEnqueueList(target, packetDef, data)
 	else
@@ -346,7 +345,7 @@ function Server.send<T>(target: Player | { Player }, packetDef: Types.PacketDefi
 	end
 end
 
-function Server.sendImmediate<T>(target: Player | { Player }, packetDef: Types.PacketDefinition<T>, data: T)
+function Server.sendImmediate<T>(target: Player | { Player }, packetDef: Types.PacketHandle<T>, data: T)
 	if typeof(target) == "table" then
 		OutgoingQueue.serverSendImmediateList(target, packetDef, data)
 	else
@@ -354,22 +353,22 @@ function Server.sendImmediate<T>(target: Player | { Player }, packetDef: Types.P
 	end
 end
 
-function Server.broadcast<T>(packetDef: Types.PacketDefinition<T>, data: T)
+function Server.broadcast<T>(packetDef: Types.PacketHandle<T>, data: T)
 	OutgoingQueue.serverBroadcast(packetDef, data)
 end
 
-function Server.broadcastExcept<T>(excludedPlayer: Player, packetDef: Types.PacketDefinition<T>, data: T)
+function Server.broadcastExcept<T>(excludedPlayer: Player, packetDef: Types.PacketHandle<T>, data: T)
 	OutgoingQueue.serverBroadcastExcept(excludedPlayer, packetDef, data)
 end
 
-function Server.broadcastImmediate<T>(packetDef: Types.PacketDefinition<T>, data: T)
+function Server.broadcastImmediate<T>(packetDef: Types.PacketHandle<T>, data: T)
 	OutgoingQueue.serverBroadcastImmediate(packetDef, data)
 end
 
 --[=[
 	Registers a persistent listener callback on the server for incoming client packets.
 ]=]
-function Server.on<T>(packetDef: Types.PacketDefinition<T>, listener: (Player, T) -> ()): Connection
+function Server.on<T>(packetDef: Types.PacketHandle<T>, listener: (Player, T) -> ()): Connection
 	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
 		error(`Cannot register event listener for Request packet '{packetDef.name}'`)
 	end
@@ -424,10 +423,10 @@ end
 --[=[
 	Registers a synchronous request-response handler for two-way client invocations.
 ]=]
-function Server.handleRequest<Req, Res>(
-	packetDef: Types.PacketDefinition<Req>,
-	responseSchema: Types.TypeDescriptor<Res>,
-	handler: (Player, Req) -> Res
+function Server.handleRequest<Req, ResD>(
+	packetDef: Types.PacketHandle<Req>,
+	responseSchema: ResD,
+	handler: (Player, Req) -> Types.InferType<ResD>
 )
 	if packetDef.packetType ~= "Request" then
 		error(`Server.handleRequest requires a packet with packetType == 'Request' (got '{packetDef.packetType}')`)
@@ -435,7 +434,7 @@ function Server.handleRequest<Req, Res>(
 	ensureListening()
 	requestHandlersByPacketId[packetDef.id] = function(player: Player, reqData: unknown)
 		const resData = handler(player, reqData :: Req)
-		return resData, responseSchema
+		return resData, responseSchema :: Types.AnyTypeDescriptor
 	end
 end
 

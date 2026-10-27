@@ -23,13 +23,13 @@ Registry.rawById = packetsById
 	Registers a packet definition with a unique name, wire transport type, and payload schema.
 	Allocates the lowest available numeric ID if none is explicitly specified.
 ]=]
-function Registry.register<T>(
+function Registry.register<D>(
 	name: string,
 	packetType: Types.PacketType,
-	schema: Types.TypeDescriptor<T>,
+	schema: D,
 	optionsOrId: (number | PacketOptions | Types.PacketPriority)?,
 	maybePriority: Types.PacketPriority?
-): Types.PacketDefinition<T>
+): Types.PacketDefinition<Types.InferType<D>>
 	assert(packetsByName[name] == nil, `Packet '{name}' is already registered`)
 
 	local explicitId: number?

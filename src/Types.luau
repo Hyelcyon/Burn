@@ -27,6 +27,37 @@ export type AnyTypeDescriptor = {
 export type ErasedTypeDescriptor = AnyTypeDescriptor
 
 --[=[
+	@within Burn
+	User-defined type function that extracts the decoded Lua value type
+	from a TypeDescriptor or PacketDefinition, or returns the type unmodified.
+]=]
+export type function InferType(D: type)
+	if not D:is("table") then
+		return D
+	end
+
+	local target = D
+	const schemaProp = D:readproperty(types.singleton("schema"))
+	if schemaProp and schemaProp:is("table") then
+		target = schemaProp
+	end
+
+	const readProp = target:readproperty(types.singleton("read"))
+	if readProp and readProp:is("function") then
+		const rets = readProp:returns().head
+		if rets and #rets > 0 then
+			return rets[1]
+		end
+	end
+
+	return D
+end
+
+export type Infer<D> = InferType<D>
+export type TypeOf<D> = InferType<D>
+export type InferPacket<P> = InferType<P>
+
+--[=[
 	@type PacketType "Reliable" | "Unreliable" | "Request"
 	@within Burn
 	Underlying network transport:
@@ -72,17 +103,21 @@ export type PacketDefinition<T> = {
 	read priorityIndex: number,
 	read schema: TypeDescriptor<T>,
 
-	read send: (self: PacketDefinition<T>, targetOrData: Player | { Player } | T, maybeData: T?) -> (),
-	read sendImmediate: (self: PacketDefinition<T>, targetOrData: Player | { Player } | T, maybeData: T?) -> (),
-	read broadcast: (self: PacketDefinition<T>, data: T) -> (),
-	read broadcastExcept: (self: PacketDefinition<T>, excludedPlayer: Player, data: T) -> (),
-	read broadcastImmediate: (self: PacketDefinition<T>, data: T) -> (),
-	read on: (self: PacketDefinition<T>, listener: ((T) -> ()) | ((Player, T) -> ())) -> Connection,
-	read once: (self: PacketDefinition<T>, listener: ((T) -> ()) | ((Player, T) -> ())) -> Connection,
-	read wait: (self: PacketDefinition<T>) -> (Player?, T),
-	read invoke: <Res>(self: PacketDefinition<T>, responseSchema: TypeDescriptor<Res>, data: T) -> Res?,
+	read send: ((self: PacketHandle<T>, target: Player | { Player }, data: T) -> ())
+		& ((self: PacketHandle<T>, data: T) -> ()),
+	read sendImmediate: ((self: PacketHandle<T>, target: Player | { Player }, data: T) -> ())
+		& ((self: PacketHandle<T>, data: T) -> ()),
+	read broadcast: (self: PacketHandle<T>, data: T) -> (),
+	read broadcastExcept: (self: PacketHandle<T>, excludedPlayer: Player, data: T) -> (),
+	read broadcastImmediate: (self: PacketHandle<T>, data: T) -> (),
+	read on: ((self: PacketHandle<T>, listener: (Player, T) -> ()) -> Connection)
+		& ((self: PacketHandle<T>, listener: (T) -> ()) -> Connection),
+	read once: ((self: PacketHandle<T>, listener: (Player, T) -> ()) -> Connection)
+		& ((self: PacketHandle<T>, listener: (T) -> ()) -> Connection),
+	read wait: (self: PacketHandle<T>) -> (Player?, T),
+	read invoke: <Res>(self: PacketHandle<T>, responseSchema: TypeDescriptor<Res>, data: T) -> Res?,
 	read handleRequest: <Res>(
-		self: PacketDefinition<T>,
+		self: PacketHandle<T>,
 		responseSchema: TypeDescriptor<Res>,
 		handler: (Player, T) -> Res
 	) -> (),
@@ -112,7 +147,28 @@ export type AnyPacketDefinition = {
 	) -> (),
 }
 
-export type ErasedPacketDefinition = AnyPacketDefinition
+export type ErasedPacketDefinition = {
+	read id: number,
+	read name: string,
+	read packetType: PacketType,
+	read priority: PacketPriority,
+	read priorityIndex: number,
+	read schema: AnyTypeDescriptor,
+}
+
+--[=[
+	@interface PacketHandle
+	@within Burn
+	Covariant metadata and binary schema handle for packet identification and dispatch.
+]=]
+export type PacketHandle<T> = {
+	read id: number,
+	read name: string,
+	read packetType: PacketType,
+	read priority: PacketPriority,
+	read priorityIndex: number,
+	read schema: TypeDescriptor<T>,
+}
 
 --[=[
 	@interface Connection
@@ -129,46 +185,40 @@ export type NetworkContext = {
 	instances: { Instance }?,
 }
 
-export type SendDispatcher = <T>(
-	target: Player | { Player } | PacketDefinition<T>,
-	packetOrData: PacketDefinition<T> | T,
-	maybeData: T?
-) -> ()
+export type SendDispatcher =
+	(<T>(target: Player | { Player }, packet: PacketHandle<T>, data: T) -> ())
+	& (<T>(packet: PacketHandle<T>, data: T) -> ())
 
-export type SendImmediateDispatcher = <T>(
-	target: Player | { Player } | PacketDefinition<T>,
-	packetOrData: PacketDefinition<T> | T,
-	maybeData: T?
-) -> ()
+export type SendImmediateDispatcher =
+	(<T>(target: Player | { Player }, packet: PacketHandle<T>, data: T) -> ())
+	& (<T>(packet: PacketHandle<T>, data: T) -> ())
 
-export type BroadcastDispatcher = <T>(packet: PacketDefinition<T>, data: T) -> ()
+export type BroadcastDispatcher = <T>(packet: PacketHandle<T>, data: T) -> ()
 
-export type BroadcastExceptDispatcher = <T>(excludedPlayer: Player, packet: PacketDefinition<T>, data: T) -> ()
+export type BroadcastExceptDispatcher = <T>(excludedPlayer: Player, packet: PacketHandle<T>, data: T) -> ()
 
-export type BroadcastImmediateDispatcher = <T>(packet: PacketDefinition<T>, data: T) -> ()
+export type BroadcastImmediateDispatcher = <T>(packet: PacketHandle<T>, data: T) -> ()
 
-export type OnDispatcher = <T>(
-	packet: PacketDefinition<T>,
-	listener: ((T) -> ()) | ((Player, T) -> ())
-) -> Connection
+export type OnDispatcher =
+	(<T>(packet: PacketHandle<T>, listener: (Player, T) -> ()) -> Connection)
+	& (<T>(packet: PacketHandle<T>, listener: (T) -> ()) -> Connection)
 
-export type OnceDispatcher = <T>(
-	packet: PacketDefinition<T>,
-	listener: ((T) -> ()) | ((Player, T) -> ())
-) -> Connection
+export type OnceDispatcher =
+	(<T>(packet: PacketHandle<T>, listener: (Player, T) -> ()) -> Connection)
+	& (<T>(packet: PacketHandle<T>, listener: (T) -> ()) -> Connection)
 
-export type WaitDispatcher = <T>(packet: PacketDefinition<T>) -> (Player?, T)
+export type WaitDispatcher = <P>(packet: P) -> (Player?, InferType<P>)
 
-export type InvokeDispatcher = <Req, Res>(
-	packet: PacketDefinition<Req>,
-	responseSchema: TypeDescriptor<Res>,
+export type InvokeDispatcher = <Req, ResD>(
+	packet: PacketHandle<Req>,
+	responseSchema: ResD,
 	data: Req
-) -> Res?
+) -> InferType<ResD>?
 
-export type HandleRequestDispatcher = <Req, Res>(
-	packet: PacketDefinition<Req>,
-	responseSchema: TypeDescriptor<Res>,
-	handler: (Player, Req) -> Res
+export type HandleRequestDispatcher = <Req, ResD>(
+	packet: PacketHandle<Req>,
+	responseSchema: ResD,
+	handler: (Player, Req) -> InferType<ResD>
 ) -> ()
 
 export type NetworkBindings = {
@@ -183,31 +233,5 @@ export type NetworkBindings = {
 	read invoke: InvokeDispatcher,
 	read handleRequest: HandleRequestDispatcher,
 }
-
-type function InferType(D: type)
-	if not D:is("table") then
-		return types.unknown
-	end
-
-	local target = D
-	const schemaProp = D:readproperty(types.singleton("schema"))
-	if schemaProp and schemaProp:is("table") then
-		target = schemaProp
-	end
-
-	const readProp = target:readproperty(types.singleton("read"))
-	if readProp and readProp:is("function") then
-		const rets = readProp:returns().head
-		if rets and #rets > 0 then
-			return rets[1]
-		end
-	end
-
-	return types.unknown
-end
-
-export type Infer<D> = InferType<D>
-export type TypeOf<D> = InferType<D>
-export type InferPacket<P> = InferType<P>
 
 return nil

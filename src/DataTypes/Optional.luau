@@ -12,7 +12,6 @@ const function Optional<T>(descriptor: Types.TypeDescriptor<T>): OptionalDescrip
 	const innerWrite = descriptor.write
 	const innerRead = descriptor.read
 	const innerSkip = descriptor.skip
-
 	const innerSize = descriptor.size
 
 	@native

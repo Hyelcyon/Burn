@@ -20,6 +20,25 @@ local cachedFolder: Folder? = nil
 local cachedReliable: RemoteEvent? = nil
 local cachedUnreliable: UnreliableRemoteEvent? = nil
 local cachedRequest: RemoteFunction? = nil
+local isReady = false
+local isInitialized = false
+local readyListeners: { () -> () }? = {}
+
+function Channel.isReady(): boolean
+	return isReady
+end
+
+function Channel.onReady(callback: () -> ())
+	if isReady then
+		task.spawn(callback)
+		return
+	end
+	if readyListeners ~= nil then
+		table.insert(readyListeners, callback)
+	else
+		task.spawn(callback)
+	end
+end
 
 --[=[
 	Resolves and caches the shared network folder in ReplicatedStorage.
@@ -124,16 +143,36 @@ function Channel.getRequestFunction(): RemoteFunction
 end
 
 function Channel.init()
+	if isInitialized then
+		return
+	end
+	isInitialized = true
+
 	if RunService:IsServer() then
 		Channel.getFolder()
 		Channel.getReliableEvent()
 		Channel.getUnreliableEvent()
 		Channel.getRequestFunction()
+		isReady = true
+	else
+		task.spawn(function()
+			Channel.getFolder()
+			Channel.getReliableEvent()
+			Channel.getUnreliableEvent()
+			Channel.getRequestFunction()
+			isReady = true
+
+			const listeners = readyListeners
+			readyListeners = nil
+			if listeners ~= nil then
+				for _, cb in listeners do
+					task.spawn(cb)
+				end
+			end
+		end)
 	end
 end
 
-if RunService:IsServer() then
-	Channel.init()
-end
+Channel.init()
 
 return Channel

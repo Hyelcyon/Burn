@@ -29,48 +29,66 @@ const TAG_SHORT_ARRAY = 0xD
 const TAG_LONG_ARRAY = 0xE
 const TAG_MAP = 0xF
 
+-- Pre-shifted 1-byte wire header tags (upper 4 bits) to eliminate runtime bit32.lshift operations.
+const HDR_NIL = 0x00
+const HDR_BOOLEAN = 0x10
+const HDR_SMALL_INT = 0x20
+const HDR_I8 = 0x30
+const HDR_I16 = 0x40
+const HDR_I32 = 0x50
+const HDR_F64 = 0x60
+const HDR_SHORT_STRING = 0x70
+const HDR_LONG_STRING = 0x80
+const HDR_BUFFER = 0x90
+const HDR_VECTOR3 = 0xA0
+const HDR_CFRAME = 0xB0
+const HDR_COLOR3 = 0xC0
+const HDR_SHORT_ARRAY = 0xD0
+const HDR_LONG_ARRAY = 0xE0
+const HDR_MAP = 0xF0
+
 -- Numbers are dynamically packed into the narrowest lossless representation:
 -- small int 0-15 (1 byte total), i8 (2 bytes), i16 (3 bytes), i32 (5 bytes), or f64 (9 bytes).
 @native
 const function write(buf: buffer, offset: number, value: unknown): number
 	if value == nil then
-		buffer.writeu8(buf, offset, bit32.lshift(TAG_NIL, 4))
+		buffer.writeu8(buf, offset, HDR_NIL)
 		return offset + 1
 	end
 
 	const valType = typeof(value)
 
 	if valType == "boolean" then
-		const flag = if value then 1 else 0
-		buffer.writeu8(buf, offset, bit32.bor(bit32.lshift(TAG_BOOLEAN, 4), flag))
+		buffer.writeu8(buf, offset, if value then HDR_BOOLEAN + 1 else HDR_BOOLEAN)
 		return offset + 1
 	elseif valType == "number" then
 		const num = value :: number
-		if num % 1 == 0 and num >= 0 and num <= 15 then
-			buffer.writeu8(buf, offset, bit32.bor(bit32.lshift(TAG_SMALL_INT, 4), num))
-			return offset + 1
-		elseif num % 1 == 0 and num >= -128 and num <= 127 then
-			buffer.writeu8(buf, offset, bit32.lshift(TAG_I8, 4))
-			buffer.writei8(buf, offset + 1, num)
-			return offset + 2
-		elseif num % 1 == 0 and num >= -32768 and num <= 32767 then
-			buffer.writeu8(buf, offset, bit32.lshift(TAG_I16, 4))
-			buffer.writei16(buf, offset + 1, num)
-			return offset + 3
-		elseif num % 1 == 0 and num >= -2147483648 and num <= 2147483647 then
-			buffer.writeu8(buf, offset, bit32.lshift(TAG_I32, 4))
-			buffer.writei32(buf, offset + 1, num)
-			return offset + 5
-		else
-			buffer.writeu8(buf, offset, bit32.lshift(TAG_F64, 4))
-			buffer.writef64(buf, offset + 1, num)
-			return offset + 9
+		if num % 1 == 0 then
+			if num >= 0 and num <= 15 then
+				buffer.writeu8(buf, offset, HDR_SMALL_INT + num)
+				return offset + 1
+			elseif num >= -128 and num <= 127 then
+				buffer.writeu8(buf, offset, HDR_I8)
+				buffer.writei8(buf, offset + 1, num)
+				return offset + 2
+			elseif num >= -32768 and num <= 32767 then
+				buffer.writeu8(buf, offset, HDR_I16)
+				buffer.writei16(buf, offset + 1, num)
+				return offset + 3
+			elseif num >= -2147483648 and num <= 2147483647 then
+				buffer.writeu8(buf, offset, HDR_I32)
+				buffer.writei32(buf, offset + 1, num)
+				return offset + 5
+			end
 		end
+		buffer.writeu8(buf, offset, HDR_F64)
+		buffer.writef64(buf, offset + 1, num)
+		return offset + 9
 	elseif valType == "string" then
 		const str = value :: string
 		const len = #str
 		if len <= 14 then
-			buffer.writeu8(buf, offset, bit32.bor(bit32.lshift(TAG_SHORT_STRING, 4), len))
+			buffer.writeu8(buf, offset, HDR_SHORT_STRING + len)
 			if len > 0 then
 				buffer.writestring(buf, offset + 1, str, len)
 			end
@@ -79,7 +97,7 @@ const function write(buf: buffer, offset: number, value: unknown): number
 			if len > 65535 then
 				error(`[Burn] String length {len} exceeds u16 limit (65535) in Auto serializer`)
 			end
-			buffer.writeu8(buf, offset, bit32.lshift(TAG_LONG_STRING, 4))
+			buffer.writeu8(buf, offset, HDR_LONG_STRING)
 			buffer.writeu16(buf, offset + 1, len)
 			buffer.writestring(buf, offset + 3, str, len)
 			return offset + 3 + len
@@ -90,20 +108,20 @@ const function write(buf: buffer, offset: number, value: unknown): number
 		if len > 65535 then
 			error(`[Burn] Buffer length {len} exceeds u16 limit (65535) in Auto serializer`)
 		end
-		buffer.writeu8(buf, offset, bit32.lshift(TAG_BUFFER, 4))
+		buffer.writeu8(buf, offset, HDR_BUFFER)
 		buffer.writeu16(buf, offset + 1, len)
 		if len > 0 then
 			buffer.copy(buf, offset + 3, raw, 0, len)
 		end
 		return offset + 3 + len
 	elseif valType == "Vector3" then
-		buffer.writeu8(buf, offset, bit32.lshift(TAG_VECTOR3, 4))
+		buffer.writeu8(buf, offset, HDR_VECTOR3)
 		return vec3.write(buf, offset + 1, value :: Vector3)
 	elseif valType == "CFrame" then
-		buffer.writeu8(buf, offset, bit32.lshift(TAG_CFRAME, 4))
+		buffer.writeu8(buf, offset, HDR_CFRAME)
 		return cf.write(buf, offset + 1, value :: CFrame)
 	elseif valType == "Color3" then
-		buffer.writeu8(buf, offset, bit32.lshift(TAG_COLOR3, 4))
+		buffer.writeu8(buf, offset, HDR_COLOR3)
 		return color3.write(buf, offset + 1, value :: Color3)
 	elseif valType == "table" then
 		const tbl = value :: { [unknown]: unknown }
@@ -113,7 +131,7 @@ const function write(buf: buffer, offset: number, value: unknown): number
 
 		if isArray then
 			if arrLen <= 14 then
-				buffer.writeu8(buf, offset, bit32.bor(bit32.lshift(TAG_SHORT_ARRAY, 4), arrLen))
+				buffer.writeu8(buf, offset, HDR_SHORT_ARRAY + arrLen)
 				local curr = offset + 1
 				for i = 1, arrLen do
 					curr = write(buf, curr, tbl[i])
@@ -123,7 +141,7 @@ const function write(buf: buffer, offset: number, value: unknown): number
 				if arrLen > 65535 then
 					error(`[Burn] Array element count {arrLen} exceeds u16 limit (65535) in Auto serializer`)
 				end
-				buffer.writeu8(buf, offset, bit32.lshift(TAG_LONG_ARRAY, 4))
+				buffer.writeu8(buf, offset, HDR_LONG_ARRAY)
 				buffer.writeu16(buf, offset + 1, arrLen)
 				local curr = offset + 3
 				for i = 1, arrLen do
@@ -132,7 +150,7 @@ const function write(buf: buffer, offset: number, value: unknown): number
 				return curr
 			end
 		else
-			buffer.writeu8(buf, offset, bit32.lshift(TAG_MAP, 4))
+			buffer.writeu8(buf, offset, HDR_MAP)
 			local count = 0
 			local curr = offset + 3
 			for k, v in tbl do
