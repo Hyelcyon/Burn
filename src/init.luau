@@ -129,7 +129,7 @@ end
 	Enqueues a packet into the outgoing priority queue for frame-batched transmission on Heartbeat.
 ]=]
 const send: Types.SendDispatcher = (
-	function<T>(target: any, packetOrData: any, maybeData: any)
+	function<T>(target: unknown, packetOrData: unknown, maybeData: unknown?)
 		if isServer then
 			if typeof(target) == "Instance" then
 				const playerTarget = target :: Player
@@ -164,7 +164,7 @@ const send: Types.SendDispatcher = (
 	Serializes and sends a packet immediately, bypassing frame batching.
 ]=]
 const sendImmediate: Types.SendImmediateDispatcher = (
-	function<T>(target: any, packetOrData: any, maybeData: any)
+	function<T>(target: unknown, packetOrData: unknown, maybeData: unknown?)
 		if isServer then
 			if typeof(target) == "Instance" then
 				const playerTarget = target :: Player

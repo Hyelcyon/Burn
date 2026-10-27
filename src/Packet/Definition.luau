@@ -160,7 +160,7 @@ const function definePacket<D>(
 		packetType = resolvedPacketType,
 		priority = resolvedPriority,
 		priorityIndex = priorityIndex,
-		schema = schema :: any,
+		schema = schemaDesc :: Types.TypeDescriptor<T>,
 	}, PacketMethods)) :: PacketDefinition<T>
 end
 
