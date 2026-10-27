@@ -41,6 +41,10 @@ end
 
 @native
 function Cursor.readU8(self: Cursor): number
+	const bufLen = buffer.len(self.raw)
+	if self.offset + 1 > bufLen then
+		error(`[Burn] Cursor buffer underflow reading u8 at offset {self.offset} (bufLen {bufLen})`)
+	end
 	const value = buffer.readu8(self.raw, self.offset)
 	self.offset += 1
 	return value
@@ -48,6 +52,10 @@ end
 
 @native
 function Cursor.readU16(self: Cursor): number
+	const bufLen = buffer.len(self.raw)
+	if self.offset + 2 > bufLen then
+		error(`[Burn] Cursor buffer underflow reading u16 at offset {self.offset} (bufLen {bufLen})`)
+	end
 	const value = buffer.readu16(self.raw, self.offset)
 	self.offset += 2
 	return value
@@ -55,6 +63,10 @@ end
 
 @native
 function Cursor.readU32(self: Cursor): number
+	const bufLen = buffer.len(self.raw)
+	if self.offset + 4 > bufLen then
+		error(`[Burn] Cursor buffer underflow reading u32 at offset {self.offset} (bufLen {bufLen})`)
+	end
 	const value = buffer.readu32(self.raw, self.offset)
 	self.offset += 4
 	return value
@@ -62,6 +74,10 @@ end
 
 @native
 function Cursor.readI8(self: Cursor): number
+	const bufLen = buffer.len(self.raw)
+	if self.offset + 1 > bufLen then
+		error(`[Burn] Cursor buffer underflow reading i8 at offset {self.offset} (bufLen {bufLen})`)
+	end
 	const value = buffer.readi8(self.raw, self.offset)
 	self.offset += 1
 	return value
@@ -69,6 +85,10 @@ end
 
 @native
 function Cursor.readI16(self: Cursor): number
+	const bufLen = buffer.len(self.raw)
+	if self.offset + 2 > bufLen then
+		error(`[Burn] Cursor buffer underflow reading i16 at offset {self.offset} (bufLen {bufLen})`)
+	end
 	const value = buffer.readi16(self.raw, self.offset)
 	self.offset += 2
 	return value
@@ -76,6 +96,10 @@ end
 
 @native
 function Cursor.readI32(self: Cursor): number
+	const bufLen = buffer.len(self.raw)
+	if self.offset + 4 > bufLen then
+		error(`[Burn] Cursor buffer underflow reading i32 at offset {self.offset} (bufLen {bufLen})`)
+	end
 	const value = buffer.readi32(self.raw, self.offset)
 	self.offset += 4
 	return value
@@ -83,6 +107,10 @@ end
 
 @native
 function Cursor.readF32(self: Cursor): number
+	const bufLen = buffer.len(self.raw)
+	if self.offset + 4 > bufLen then
+		error(`[Burn] Cursor buffer underflow reading f32 at offset {self.offset} (bufLen {bufLen})`)
+	end
 	const value = buffer.readf32(self.raw, self.offset)
 	self.offset += 4
 	return value
@@ -90,6 +118,10 @@ end
 
 @native
 function Cursor.readF64(self: Cursor): number
+	const bufLen = buffer.len(self.raw)
+	if self.offset + 8 > bufLen then
+		error(`[Burn] Cursor buffer underflow reading f64 at offset {self.offset} (bufLen {bufLen})`)
+	end
 	const value = buffer.readf64(self.raw, self.offset)
 	self.offset += 8
 	return value
@@ -97,6 +129,12 @@ end
 
 @native
 function Cursor.readString(self: Cursor, count: number): string
+	const bufLen = buffer.len(self.raw)
+	if self.offset + count > bufLen then
+		error(
+			`[Burn] Cursor buffer underflow reading string of length {count} at offset {self.offset} (bufLen {bufLen})`
+		)
+	end
 	const value = buffer.readstring(self.raw, self.offset, count)
 	self.offset += count
 	return value
@@ -107,6 +145,10 @@ end
 ]=]
 @native
 function Cursor.skip(self: Cursor, count: number): ()
+	const bufLen = buffer.len(self.raw)
+	if self.offset + count > bufLen then
+		error(`[Burn] Cursor buffer underflow skipping {count} bytes at offset {self.offset} (bufLen {bufLen})`)
+	end
 	self.offset += count
 end
 

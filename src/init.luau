@@ -16,6 +16,7 @@ export type PacketType = Types.PacketType
 export type PacketPriority = Types.PacketPriority
 export type PacketOptions = Types.PacketOptions
 export type PacketDefinition<T> = Types.PacketDefinition<T>
+export type PacketHandle<T> = Types.PacketHandle<T>
 export type AnyPacketDefinition = Types.AnyPacketDefinition
 export type ErasedPacketDefinition = Types.ErasedPacketDefinition
 export type Connection = Types.Connection
@@ -88,26 +89,35 @@ end
 	Resumes with `(player, data)` on the server and `(data)` on the client.
 	@yields
 ]=]
-const wait: Types.WaitDispatcher = function<T>(packet): (Player?, T)
+-- Invariant: Connecting runtime coroutine resumption to higher-order type function synthesis
+-- requires a localized boundary cast to satisfy Luau Solver V2 generic reduction invariants.
+const waitImpl = function(packet: unknown): (Player?, unknown)
 	const thread = coroutine.running()
+	const handle = packet :: Types.PacketHandle<unknown>
 	if isServer then
 		local conn: Types.Connection
-		conn = Network.Server.on(packet, function(player: Player, data: T)
+		conn = Network.Server.on(handle, function(player: Player, data: unknown)
 			conn:disconnect()
-			task.spawn(thread, player, data)
+			if coroutine.status(thread) == "suspended" then
+				task.spawn(thread, player, data)
+			end
 		end)
-		local player: Player?, data: T = coroutine.yield()
+		local player: Player?, data: unknown = coroutine.yield()
 		return player, data
 	else
 		local conn: Types.Connection
-		conn = Network.Client.on(packet, function(data: T)
+		conn = Network.Client.on(handle, function(data: unknown)
 			conn:disconnect()
-			task.spawn(thread, data)
+			if coroutine.status(thread) == "suspended" then
+				task.spawn(thread, data)
+			end
 		end)
-		local data: T = coroutine.yield()
+		local data: unknown = coroutine.yield()
 		return nil, data
 	end
 end
+
+const wait: Types.WaitDispatcher = (waitImpl :: unknown) :: Types.WaitDispatcher
 
 const function isPacketDefinition(value: unknown): boolean
 	return typeof(value) == "table"
@@ -118,58 +128,72 @@ end
 --[=[
 	Enqueues a packet into the outgoing priority queue for frame-batched transmission on Heartbeat.
 ]=]
-const send: Types.SendDispatcher = function<T>(target, packetOrData, maybeData)
-	if isServer then
-		if isPacketDefinition(target) then
-			const packet = target :: Types.PacketDefinition<T>
-			const data = packetOrData :: T
-			Network.Server.broadcast(packet, data)
+const send: Types.SendDispatcher = (
+	function<T>(target: any, packetOrData: any, maybeData: any)
+		if isServer then
+			if typeof(target) == "Instance" then
+				const playerTarget = target :: Player
+				const packet = packetOrData :: Types.PacketHandle<T>
+				const data = maybeData :: T
+				Network.Server.send(playerTarget, packet, data)
+			elseif isPacketDefinition(target) then
+				const packet = target :: Types.PacketHandle<T>
+				const data = packetOrData :: T
+				Network.Server.broadcast(packet, data)
+			else
+				const playerList = target :: { Player }
+				const packet = packetOrData :: Types.PacketHandle<T>
+				const data = maybeData :: T
+				Network.Server.send(playerList, packet, data)
+			end
 		else
-			const playerTarget = target :: Player | { Player }
-			const packet = packetOrData :: Types.PacketDefinition<T>
-			const data = maybeData :: T
-			Network.Server.send(playerTarget, packet, data)
+			if isPacketDefinition(target) then
+				const packet = target :: Types.PacketHandle<T>
+				const data = packetOrData :: T
+				Network.Client.send(packet, data)
+			else
+				const packet = packetOrData :: Types.PacketHandle<T>
+				const data = maybeData :: T
+				Network.Client.send(packet, data)
+			end
 		end
-	else
-		if isPacketDefinition(target) then
-			const packet = target :: Types.PacketDefinition<T>
-			const data = packetOrData :: T
-			Network.Client.send(packet, data)
-		else
-			const packet = packetOrData :: Types.PacketDefinition<T>
-			const data = maybeData :: T
-			Network.Client.send(packet, data)
-		end
-	end
-end
+	end :: unknown
+) :: Types.SendDispatcher
 
 --[=[
 	Serializes and sends a packet immediately, bypassing frame batching.
 ]=]
-const sendImmediate: Types.SendImmediateDispatcher = function<T>(target, packetOrData, maybeData)
-	if isServer then
-		if isPacketDefinition(target) then
-			const packet = target :: Types.PacketDefinition<T>
-			const data = packetOrData :: T
-			Network.Server.broadcastImmediate(packet, data)
+const sendImmediate: Types.SendImmediateDispatcher = (
+	function<T>(target: any, packetOrData: any, maybeData: any)
+		if isServer then
+			if typeof(target) == "Instance" then
+				const playerTarget = target :: Player
+				const packet = packetOrData :: Types.PacketHandle<T>
+				const data = maybeData :: T
+				Network.Server.sendImmediate(playerTarget, packet, data)
+			elseif isPacketDefinition(target) then
+				const packet = target :: Types.PacketHandle<T>
+				const data = packetOrData :: T
+				Network.Server.broadcastImmediate(packet, data)
+			else
+				const playerList = target :: { Player }
+				const packet = packetOrData :: Types.PacketHandle<T>
+				const data = maybeData :: T
+				Network.Server.sendImmediate(playerList, packet, data)
+			end
 		else
-			const playerTarget = target :: Player | { Player }
-			const packet = packetOrData :: Types.PacketDefinition<T>
-			const data = maybeData :: T
-			Network.Server.sendImmediate(playerTarget, packet, data)
+			if isPacketDefinition(target) then
+				const packet = target :: Types.PacketHandle<T>
+				const data = packetOrData :: T
+				Network.Client.sendImmediate(packet, data)
+			else
+				const packet = packetOrData :: Types.PacketHandle<T>
+				const data = maybeData :: T
+				Network.Client.sendImmediate(packet, data)
+			end
 		end
-	else
-		if isPacketDefinition(target) then
-			const packet = target :: Types.PacketDefinition<T>
-			const data = packetOrData :: T
-			Network.Client.sendImmediate(packet, data)
-		else
-			const packet = packetOrData :: Types.PacketDefinition<T>
-			const data = maybeData :: T
-			Network.Client.sendImmediate(packet, data)
-		end
-	end
-end
+	end :: unknown
+) :: Types.SendImmediateDispatcher
 
 --[=[
 	Enqueues a packet to be sent to all connected clients on next Heartbeat flush.
@@ -203,7 +227,7 @@ end
 	@client
 	@yields
 ]=]
-const invoke: Types.InvokeDispatcher = function<Req, Res>(packet, responseSchema, data): Res?
+const invoke: Types.InvokeDispatcher = function(packet, responseSchema, data)
 	assert(isClient, "Burn.invoke can only be called on the client")
 	return Network.Client.invoke(packet, responseSchema, data)
 end
@@ -212,7 +236,7 @@ end
 	Registers a server-side request handler for two-way client invocations.
 	@server
 ]=]
-const handleRequest: Types.HandleRequestDispatcher = function<Req, Res>(packet, responseSchema, handler)
+const handleRequest: Types.HandleRequestDispatcher = function(packet, responseSchema, handler)
 	assert(isServer, "Burn.handleRequest can only be called on the server")
 	Network.Server.handleRequest(packet, responseSchema, handler)
 end
@@ -220,13 +244,13 @@ end
 --[=[
 	Registers a network packet with a schema, transport type, and optional ID/priority.
 ]=]
-const function definePacket<T>(
+const function definePacket<D>(
 	name: string,
 	packetType: Types.PacketType,
-	schema: Types.TypeDescriptor<T>,
+	schema: D,
 	optionsOrId: (number | PacketOptions | Types.PacketPriority)?,
 	maybePriority: Types.PacketPriority?
-): Types.PacketDefinition<T>
+): Types.PacketDefinition<Types.InferType<D>>
 	return Packet.Registry.register(name, packetType, schema, optionsOrId, maybePriority)
 end
 
@@ -238,7 +262,7 @@ Packet.Definition.setNetworkBindings({
 	broadcastImmediate = broadcastImmediate,
 	on = on,
 	once = once,
-	wait = wait,
+	wait = wait :: Types.WaitDispatcher,
 	invoke = invoke,
 	handleRequest = handleRequest,
 })
@@ -319,7 +343,7 @@ const Burn = table.freeze({
 	-- Networking API
 	on = on,
 	once = once,
-	wait = wait,
+	wait = wait :: Types.WaitDispatcher,
 	send = send,
 	sendImmediate = sendImmediate,
 	broadcast = broadcast,

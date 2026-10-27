@@ -50,7 +50,7 @@ const function Array<T>(elementDescriptor: Types.TypeDescriptor<T>): ArrayDescri
 			error(`[Burn] Buffer underflow: array of {count} dynamic elements exceeds buffer size {bufLen}`)
 		end
 
-		const list: { T } = table.create(count)
+		const list: { T } = table.create(count) :: { T }
 		local item: T
 		for index = 1, count do
 			item, currentOffset = elemRead(buf, currentOffset)

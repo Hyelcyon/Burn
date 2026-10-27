@@ -20,6 +20,9 @@ const function Map<K, V>(
 	const valRead = valueDescriptor.read
 	const valSkip = valueDescriptor.skip
 
+	const keySize = keyDescriptor.size
+	const valSize = valueDescriptor.size
+
 	@native
 	const function write(buf: buffer, offset: number, dict: { [K]: V }): number
 		-- Reserve 2 bytes for the entry count, counting entries during traversal to avoid a pre-pass.
@@ -49,8 +52,8 @@ const function Map<K, V>(
 		local currentOffset = offset + 2
 
 		-- Trust boundary: Every key-value pair consumes at least 2 bytes (>= 1 byte key, >= 1 byte value).
-		if keyDescriptor.size ~= nil and valueDescriptor.size ~= nil then
-			const fixedEntrySize = keyDescriptor.size + valueDescriptor.size
+		if keySize ~= nil and valSize ~= nil then
+			const fixedEntrySize = keySize + valSize
 			if currentOffset + count * fixedEntrySize > bufLen then
 				error(`[Burn] Buffer underflow: map of {count} fixed entries exceeds buffer size {bufLen}`)
 			end
@@ -71,8 +74,8 @@ const function Map<K, V>(
 	end
 
 	local skip: (buf: buffer, offset: number) -> number
-	if keyDescriptor.size ~= nil and valueDescriptor.size ~= nil then
-		const fixedEntrySize = keyDescriptor.size + valueDescriptor.size
+	if keySize ~= nil and valSize ~= nil then
+		const fixedEntrySize = keySize + valSize
 		-- O(1) skip: When both key and value have known static sizes, skip computes offset directly.
 		@native
 		local function skipFixed(buf: buffer, offset: number): number

@@ -2,19 +2,43 @@
 
 const Types = require("@src/Types")
 
-type function InferBitfieldType(T: type)
+export type function InferBitfieldType(T: type)
 	if not T:is("table") then
 		return types.unknown
 	end
 	const resultTable = types.newtable()
+	local propCount = 0
 	for key, prop in T:properties() do
 		const valType = prop.read or prop.write
 		if valType and valType:is("singleton") and typeof(valType:value()) == "string" then
 			resultTable:setproperty(valType, types.boolean)
+			propCount += 1
 		elseif key:is("singleton") and typeof(key:value()) == "string" then
 			resultTable:setproperty(key, types.boolean)
+			propCount += 1
 		end
 	end
+
+	const idx = T:indexer()
+	if idx then
+		const readType = idx.readresult
+		if readType:is("singleton") and typeof(readType:value()) == "string" then
+			resultTable:setproperty(readType, types.boolean)
+			propCount += 1
+		elseif readType:is("union") then
+			for _, comp in readType:components() do
+				if comp:is("singleton") and typeof(comp:value()) == "string" then
+					resultTable:setproperty(comp, types.boolean)
+					propCount += 1
+				end
+			end
+		end
+	end
+
+	if propCount == 0 then
+		resultTable:setindexer(types.string, types.boolean)
+	end
+
 	return resultTable
 end
 

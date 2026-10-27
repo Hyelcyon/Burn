@@ -2,7 +2,7 @@
 
 const Types = require("@src/Types")
 
-type function InferStructType(T: type)
+export type function InferStructType(T: type)
 	if not T:is("table") then
 		return types.unknown
 	end

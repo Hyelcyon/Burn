@@ -107,7 +107,7 @@ const function ensureListening()
 		return
 	end
 
-	task.spawn(function()
+	Channel.onReady(function()
 		Channel.getReliableEvent().OnClientEvent:Connect(function(rawBuf, rawInstances)
 			if typeof(rawBuf) == "buffer" then
 				const instances = if typeof(rawInstances) == "table" and #rawInstances <= 65535
@@ -116,9 +116,7 @@ const function ensureListening()
 				decodeAndDispatch(rawBuf, instances, "Reliable")
 			end
 		end)
-	end)
 
-	task.spawn(function()
 		Channel.getUnreliableEvent().OnClientEvent:Connect(function(rawBuf, rawInstances)
 			if typeof(rawBuf) == "buffer" then
 				const instances = if typeof(rawInstances) == "table" and #rawInstances <= 65535
@@ -130,11 +128,11 @@ const function ensureListening()
 	end)
 end
 
-function Client.send<T>(packetDef: Types.PacketDefinition<T>, data: T)
+function Client.send<T>(packetDef: Types.PacketHandle<T>, data: T)
 	OutgoingQueue.clientEnqueue(packetDef, data)
 end
 
-function Client.sendImmediate<T>(packetDef: Types.PacketDefinition<T>, data: T)
+function Client.sendImmediate<T>(packetDef: Types.PacketHandle<T>, data: T)
 	OutgoingQueue.clientSendImmediate(packetDef, data)
 end
 
@@ -142,7 +140,7 @@ end
 	Registers a persistent packet listener. Returns a Connection whose `:disconnect()`
 	unlinks the node in O(1) time without shifting listener arrays.
 ]=]
-function Client.on<T>(packetDef: Types.PacketDefinition<T>, listener: (T) -> ()): Connection
+function Client.on<T>(packetDef: Types.PacketHandle<T>, listener: (T) -> ()): Connection
 	if packetDef.packetType ~= "Reliable" and packetDef.packetType ~= "Unreliable" then
 		error(`Cannot register event listener for Request packet '{packetDef.name}'`)
 	end
@@ -199,11 +197,8 @@ end
 	Sends a two-way request to the server and returns the decoded response, or nil on failure.
 	@yields
 ]=]
-function Client.invoke<Req, Res>(
-	packetDef: Types.PacketDefinition<Req>,
-	responseSchema: Types.TypeDescriptor<Res>,
-	data: Req
-): Res?
+function Client.invoke<Req, ResD>(packetDef: Types.PacketHandle<Req>, responseSchema: ResD, data: Req): Types.InferType<ResD>?
+	type Res = Types.InferType<ResD>
 	if packetDef.packetType ~= "Request" then
 		error(`Client.invoke requires a packet with packetType == 'Request' (got '{packetDef.packetType}')`)
 	end
@@ -270,7 +265,8 @@ function Client.invoke<Req, Res>(
 
 	const incomingInstances = if typeof(resInstances) == "table" and #resInstances <= 65535 then resInstances else nil
 	InstanceCodec.setIncomingInstances(incomingInstances)
-	const readOk, res1, res2 = pcall(responseSchema.read, resBuf, Constants.HEADER_SIZE)
+	const responseDesc = responseSchema :: Types.AnyTypeDescriptor
+	const readOk, res1, res2 = pcall(responseDesc.read, resBuf, Constants.HEADER_SIZE)
 	InstanceCodec.setIncomingInstances(nil)
 	if not readOk then
 		return nil
